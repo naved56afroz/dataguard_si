@@ -1,0 +1,279 @@
+---
+# Copyright (c) IBM Corporation 2021
+# tasks file for oracle_install
+- name: Run initialization tasks
+  ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
+  when: not init_done is defined
+
+- name: Checking if Dataguard setup was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/dataguard.success"
+  register: dataguarddone
+  when: inventory_hostname == primary_host
+
+- name: Exit if Dataguard setup was already done
+  ansible.builtin.fail:
+    msg: "Dataguard setup already done. Exiting."
+  when: dataguarddone.stat.exists
+  run_once: true
+
+- name: End play if Dataguard setup Task was done
+  ansible.builtin.meta: end_play
+  when: dataguarddone.stat.exists
+  run_once: true
+
+# Precheck 24: Verify network connectivity between primary and standby
+- name: Verify primary can ping standby host
+  ansible.builtin.command: "ping -c 2 {{ standby_host }}"
+  register: ping_primary_to_standby
+  changed_when: false
+  ignore_errors: true
+  when: inventory_hostname == primary_host
+
+- name: Fail if primary cannot reach standby
+  ansible.builtin.fail:
+    msg: "Primary server {{ primary_host }} cannot reach standby server {{ standby_host }}. Check network connectivity."
+  when:
+      - ping_primary_to_standby.rc | default(0) != 0 and ping_primary_to_standby is defined
+      - inventory_hostname == primary_host
+
+- name: Verify standby can ping primary host
+  ansible.builtin.command: "ping -c 2 {{ primary_host }}"
+  register: ping_standby_to_primary
+  changed_when: false
+  ignore_errors: true
+  when: inventory_hostname == standby_host
+
+- name: Fail if standby cannot reach primary
+  ansible.builtin.fail:
+    msg: "Standby server {{ standby_host }} cannot reach primary server {{ primary_host }}. Check network connectivity."
+  when:
+      - ping_standby_to_primary.rc | default(0) != 0 and ping_standby_to_primary is defined
+      - inventory_hostname == standby_host
+
+- name: Copy Dataguard Pre-check script for primary
+  ansible.builtin.template:
+    src: dataguard_precheck.sh.j2
+    dest: "{{ scripts_dir }}/dataguard_precheck.sh"
+    mode: '0755'
+  vars:
+    database_name: "primary"
+    when: inventory_hostname == primary_host 
+
+- name: Execute Dataguard Pre-check script on primary
+  ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
+  register: precheck_output
+  failed_when: precheck_output.rc != 0
+  changed_when: false
+  when: inventory_hostname == primary_host 
+
+- name: Debug Pre-check Output for primary dataabse
+  ansible.builtin.debug:
+    msg: "{{ precheck_output.stdout_lines }}"
+  when: inventory_hostname == primary_host 
+
+## check only from DB home 
+
+- name: Get release patch details from site
+  shell: "{{ databases.primary.grid_db_home }}/bin/crsctl query has releasepatch" 
+  register: patch_info
+
+- name: Set patch level and patches facts
+  set_fact:
+    patch_level: "{{ patch_info.stdout | regex_search('Oracle Clusterware release patch level is \\[(.*?)\\]', '\\1') }}"
+    patches: "{{ patch_info.stdout | regex_search('complete list of patches \\[(.*?)\\]', '\\1') }}"
+
+- name: Set standby patch details for comparison (on standby only)
+  set_fact:
+    standby_patch_level: "{{ patch_level }}"
+    standby_patches: "{{ patches }}"
+  when: inventory_hostname == standby_host 
+
+- name: Set primary patch details for comparison (on primary only)
+  set_fact:
+    primary_patch_level: "{{ patch_level }}"
+    primary_patches: "{{ patches }}"
+  when: inventory_hostname == primary_host 
+
+- name: Fail if patch levels or patches do not match between primary and standby
+  fail:
+    msg: "Patch levels or patches mismatch between primary and standby databases!"
+  when:
+    - hostvars[primary_host].primary_patch_level != hostvars[standby_host].standby_patch_level
+    - hostvars[primary_host].primary_patches != hostvars[standby_host].standby_patches
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Precheck 25: Check if ASM and OMF are used for datafile storage
+#- name: Check if database uses ASM and OMF for primary
+#  ansible.builtin.include_tasks: roles/common/tasks/run_sql.yml
+#  vars:
+#    database_name: "primary"
+#    sql_query: |
+#      select count(*) from v\\\$asm_diskgroup;
+#      select value from v\\\$parameter where name='db_create_file_dest';
+#  when: inventory_hostname == primary_host
+#
+#- name: Validate ASM and OMF settings
+#  ansible.builtin.fail:
+#    msg: "Database does not use ASM or OMF. Ensure ASM is configured and OMF is enabled."
+#  when:
+#     - sql_query_output is defined
+#     - sql_query_output[0] | int == 0  or sql_query_output[1] | trim == ""  # No ASM Diskgroup found or OMF is not set default empty
+#     - inventory_hostname == primary_host
+#
+## Precheck 26: Ensure archive log mode is enabled
+#- name: Verify primary database is in ARCHIVELOG mode
+#  ansible.builtin.include_tasks: roles/common/tasks/run_sql.yml
+#  vars:
+#    database_name: "primary"
+#    sql_query: |
+#      select log_mode from v\\\$database;
+#  when: inventory_hostname == primary_host
+#
+#- name: Validate primary database is in ARCHIVELOG mode
+#  ansible.builtin.fail:
+#    msg: "Database is not running in ARCHIVELOG mode. Please enable the ARCHIVELOG mode then retry."
+#  when:
+#     - sql_query_output is defined
+#     - sql_query_output[0] != "ARCHIVELOG"   # Archive log mode
+#     - inventory_hostname == primary_host
+#
+## Precheck 27.1: Ensure online redo logs are identical in size
+#- name: Check redo log sizes
+#  ansible.builtin.include_tasks: roles/common/tasks/run_sql.yml
+#  vars:
+#    database_name: "primary"
+#    sql_query: |
+#      select group#, bytes from v\\\$log;
+#  when: inventory_hostname == primary_host
+#
+#- name: Ensure redo log sizes are identical
+#  ansible.builtin.fail:
+#    msg: "Redo log sizes are not identical across groups."
+#  when:
+#    - sql_query_output is defined
+#    - sql_query_output | map('regex_replace', '[^0-9]', '') | list | unique | length > 1
+#    - inventory_hostname == primary_host
+#
+## Precheck 27.4: Check redo logs are multiplexed
+#- name: Check redo logs are multiplexed
+#  ansible.builtin.include_tasks: roles/common/tasks/run_sql.yml
+#  vars:
+#    database_name: "primary"
+#    sql_query: |
+#      select group#, count(*) from v\\\$logfile group by group# having count(*) < 2;
+#  when: inventory_hostname == primary_host
+#
+#- name: Validate redo logs are multiplexed
+#  ansible.builtin.fail:
+#    msg: "Redo log sizes are not multiplexed"
+#  when:
+#    - sql_query_output is defined
+#    - sql_query_output | length > 0
+#    - inventory_hostname == primary_host
+#
+#- name: Debug query output
+#  ansible.builtin.debug:
+#    msg:
+#      - "{{ sql_query_output }}"
+#  when:
+#    - sql_query_output is defined
+#    - inventory_hostname == primary_host
+#
+## Precheck 28: Check if password and spfile are stored in ASM
+#- name: Verify password and spfile are in ASM
+#  ansible.builtin.shell: |
+#    sqlplus -s / as sysdba <<EOF
+#    set heading off feedback off
+#    select name, value from v$parameter where name in ('spfile', 'remote_login_passwordfile');
+#    exit;
+#    EOF
+#  register: asm_password_spfile
+#  failed_when: "'ASM' not in asm_password_spfile.stdout"
+#  tags: precheck_spfile_asm
+#
+## Precheck 29: Check if Oracle software is installed on standby
+#- name: Ensure Oracle software is installed on standby
+#  ansible.builtin.shell: "ls {{ oracle_home }}/bin/sqlplus"
+#  delegate_to: "{{ standby_host }}"
+#  register: oracle_installed
+#  failed_when: oracle_installed.rc != 0
+#  tags: precheck_oracle_installed
+#
+## Precheck 30: Ensure standby matches primary software versions
+#- name: Compare Oracle software versions on primary and standby
+#  ansible.builtin.shell: |
+#    sqlplus -s / as sysdba <<EOF
+#    set heading off feedback off
+#    select banner from v$version where banner like 'Oracle%';
+#    exit;
+#    EOF
+#  register: primary_version
+#
+#- name: Get standby database version
+#  ansible.builtin.shell: |
+#    sqlplus -s / as sysdba <<EOF
+#    set heading off feedback off
+#    select banner from v$version where banner like 'Oracle%';
+#    exit;
+#    EOF
+#  delegate_to: "{{ standby_host }}"
+#  register: standby_version
+#
+#- name: Validate software versions match
+#  ansible.builtin.fail:
+#    msg: "Primary and Standby Oracle versions do not match!"
+#  when: primary_version.stdout != standby_version.stdout
+#  tags: precheck_software_match
+#
+## Precheck 31: Check standby uses ASM and OMF
+#- name: Ensure standby uses ASM and OMF
+#  ansible.builtin.shell: |
+#    sqlplus -s / as sysdba <<EOF
+#    set heading off feedback off
+#    select value from v$parameter where name='db_create_file_dest';
+#    exit;
+#    EOF
+#  delegate_to: "{{ standby_host }}"
+#  register: standby_asm_omf
+#  failed_when: "'NULL' in standby_asm_omf.stdout"
+#  tags: precheck_standby_asm_omf
+#
+## Precheck 32: Ensure standby resides on separate hardware
+#- name: Check standby host hardware
+#  ansible.builtin.shell: "uname -a"
+#  delegate_to: "{{ standby_host }}"
+#  register: standby_hardware
+#
+#- name: Validate standby is on different hardware
+#  fail:
+#    msg: "Primary and standby are running on the same hardware!"
+#  when: inventory_hostname in standby_hardware.stdout
+#  tags: precheck_standby_hardware
+#
+## Precheck 33: Check role separation for Oracle and Grid Infrastructure
+#- name: Validate role separation for Oracle and Grid Infrastructure
+#  ansible.builtin.shell: "id -Gn"
+#  register: user_groups
+#  failed_when: "'dba' not in user_groups.stdout and 'asmadmin' not in user_groups.stdout"
+#  tags: precheck_role_separation

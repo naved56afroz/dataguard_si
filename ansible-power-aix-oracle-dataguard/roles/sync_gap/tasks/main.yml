@@ -1,0 +1,8 @@
+---
+# Copyright (c) IBM Corporation 2021
+# tasks file for oracle_install
+
+# Tasks for sync_gap
+- name: Placeholder task for sync_gap
+  debug:
+    msg: "Executing sync_gap tasks"
