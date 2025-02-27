@@ -75,6 +75,12 @@
   register: dg_sync_status
   when: inventory_hostname == standby_host
 
+# Debug SQL Output (to check actual response)
+- name: Debug Raw SQL Output
+  ansible.builtin.debug:
+    var: dg_sync_status.stdout_lines
+  when: inventory_hostname == standby_host
+  
 # Extract Data Guard Sync Status Safely
 - name: Extract Data Guard Sync Status
   ansible.builtin.set_fact:
