@@ -79,24 +79,21 @@ elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
             SET TRIMSPOOL ON
 
             ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
-            SELECT 'STANDBY_SEQ:' || SEQUENCE# FROM V\$MANAGED_STANDBY WHERE PROCESS='MRP0';
         SQL
         fi
 
-        # Get sequence# if MRP process is running 
-        if [[ "$MRP_RUNNING" -eq 1 ]]; then
-            su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
-            SET HEADING OFF
-            SET FEEDBACK OFF
-            SET PAGESIZE 0
-            SET LINESIZE 1000
-            SET TRIMOUT ON
-            SET TRIMSPOOL ON
-
-            SELECT 'STANDBY_SEQ:' || SEQUENCE# FROM V\$MANAGED_STANDBY WHERE PROCESS='MRP0';
-        SQL
-        fi
-
+    # Get sequence# if MRP process is running 
+    su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
+    SET HEADING OFF
+    SET FEEDBACK OFF
+    SET PAGESIZE 0
+    SET LINESIZE 1000
+    SET TRIMOUT ON
+    SET TRIMSPOOL ON
+    
+    SELECT 'STANDBY_SEQ:' || SEQUENCE# FROM V\$MANAGED_STANDBY WHERE PROCESS='MRP0';
+    SQL
+        
     STANDBY_SEQ=$(grep "STANDBY_SEQ:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
 
 fi
