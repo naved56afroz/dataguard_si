@@ -23,10 +23,15 @@
 
 - name: Extract Primary Sequence Number
   ansible.builtin.set_fact:
-    primary_seq: "{{ (primary_output.stdout_lines | regex_search('PRIMARY_SEQ\\s+(\\d+)', '\\1')) | default([]) | first }}"
-  when: 
+    primary_seq: "{{ (primary_output.stdout | regex_search('PRIMARY_SEQ\\s+(\\d+)'))[0] | default('') }}"
+  when:
     - inventory_hostname == primary_host
-    - primary_output.stdout_lines is defined
+    - primary_output.stdout is defined
+
+- name: Debug Primary Output
+  debug:
+    var: primary_output.stdout
+  when: inventory_hostname == primary_host
 
 - name: Extract Standby Sequence Number
   ansible.builtin.set_fact:
