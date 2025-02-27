@@ -28,9 +28,23 @@
     - inventory_hostname == primary_host
     - primary_output.stdout is defined
 
+- name: debug Primary Sequence Number
+  ansible.builtin.debug:
+    msg: primary_output.stdout
+  when:
+    - inventory_hostname == primary_host
+    - primary_output.stdout is defined
+
 - name: Extract Standby Sequence Number
   ansible.builtin.set_fact:
     standby_seq: "{{ (standby_output.stdout | regex_search('STANDBY_SEQ\\s+(\\d+)'))[0] | default('') }}"
+  when: 
+    - inventory_hostname == standby_host
+    - standby_output.stdout_lines is defined
+
+- name: debug Standby Sequence Number
+  ansible.builtin.debug:
+    msg: standby_output.stdout
   when: 
     - inventory_hostname == standby_host
     - standby_output.stdout_lines is defined
