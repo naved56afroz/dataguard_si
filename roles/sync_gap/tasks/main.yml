@@ -75,16 +75,22 @@
   register: dg_sync_status
   when: inventory_hostname == standby_host
 
-# Print a Beautiful Message
+# Extract Data Guard Sync Status Safely
+- name: Extract Data Guard Sync Status
+  ansible.builtin.set_fact:
+    dg_sync_data: "{{ dg_sync_status.stdout_lines | select('match', '^\\s*\\d+\\s+\\d+\\s+\\d+\\s+\\d+') | list | first | split() }}"
+  when: inventory_hostname == standby_host and dg_sync_status.stdout_lines | length > 4
+
+# Print Data Guard Sync Status (with Safe Parsing)
 - name: Print Data Guard Sync Status
   ansible.builtin.debug:
     msg: |
-      **Data Guard Sync Check**
+      🌟 **Data Guard Sync Check** 🌟
       ------------------------------------
-      **Thread:** {{ dg_sync_status.stdout_lines[4].split()[0] }}
-      **Last Sequence Received:** {{ dg_sync_status.stdout_lines[4].split()[1] }}
-      **Last Sequence Applied:** {{ dg_sync_status.stdout_lines[4].split()[2] }}
-      **Difference:** {{ dg_sync_status.stdout_lines[4].split()[3] }}
+      🗂 **Thread:** {{ dg_sync_data[0] | default('N/A') }}
+      📩 **Last Sequence Received:** {{ dg_sync_data[1] | default('N/A') }}
+      📤 **Last Sequence Applied:** {{ dg_sync_data[2] | default('N/A') }}
+      🔄 **Difference:** {{ dg_sync_data[3] | default('N/A') }}
       ------------------------------------
-      **Status:** {{ 'In Sync ' if dg_sync_status.stdout_lines[4].split()[3] == '0' else 'Lagging' }}
-  when: inventory_hostname == standby_host
+      ✅ **Status:** {{ 'In Sync 🎉' if dg_sync_data[3] | default('1') == '0' else 'Lagging ❌' }}
+  when: inventory_hostname == standby_host and dg_sync_data is defined
