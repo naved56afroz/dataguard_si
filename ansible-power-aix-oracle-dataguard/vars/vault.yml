@@ -1,6 +1,0 @@
-default_gipass: Welcome1             # ASM sys user password.
-default_dbpass: Welcome1             # Sys user password.
-
-asm_password: Welcome1               # ASM sys user password for Single Instance GI Upgrade.
-mos_login:                           # My Oracle Support Username.
-mos_password:                        # My Oracle Support Password.
