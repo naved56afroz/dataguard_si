@@ -40,15 +40,21 @@
     - inventory_hostname == standby_host
     - standby_output.stdout_lines is defined
 
-- name: Debug Primary Output
+- name: Debug Standby Output
   debug:
     var: standby_output.stdout
   when: inventory_hostname == standby_host
 
+# Store Standby Sequence on Primary Host
+- name: Fetch Standby Sequence on Primary
+  ansible.builtin.set_fact:
+    standby_seq: "{{ hostvars[standby_host].standby_seq }}"
+  when: inventory_hostname == primary_host
+
 - name: Fail if Data Guard is out of sync
   ansible.builtin.fail:
     msg: "Data Guard is not in sync! Primary: {{ primary_seq }}, Standby: {{ standby_seq }}"
-  when: 
+  when:
     - inventory_hostname == primary_host
-    - primary_seq != standby_seq
+    - primary_seq | default('') != standby_seq | default('')
   run_once: true
