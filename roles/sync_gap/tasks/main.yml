@@ -86,34 +86,17 @@
   ansible.builtin.set_fact:
     dg_sync_data: "{{ dg_sync_status.stdout_lines | select('match', '^\\s*\\d+\\s+\\d+\\s+\\d+\\s+\\d+') | list | first | split() }}"
   when: inventory_hostname == standby_host and dg_sync_status.stdout_lines | length == 4
-
-- name: Print Data Guard Sync Status
-  ansible.builtin.debug:
-    msg: |
-      🌟 **Data Guard Sync Check** 🌟
-      ------------------------------------
-      🗂 **Thread:** {{ thread }}
-      📩 **Last Sequence Received:** {{ last_received }}
-      📤 **Last Sequence Applied:** {{ last_applied }}
-      🔄 **Difference:** {{ difference }}
-      ------------------------------------
-      {% if difference == 0 %}
-      ✅ **Status:** In Sync 🎉
-      {% else %}
-      ❌ **Status:** Out of Sync! Check logs. ⚠️
-      {% endif %}
-  when: inventory_hostname == standby_host and dg_sync_data is defined
       
 # Print Data Guard Sync Status (with Safe Parsing)
 - name: Print Data Guard Sync Status
   ansible.builtin.debug:
     msg: |
-      🌟 **Data Guard Sync Check** 🌟
+      **Data Guard Sync Check**
       ------------------------------------
-      🗂 **Thread:** {{ dg_sync_data[0] | default('N/A') }}
-      📩 **Last Sequence Received:** {{ dg_sync_data[1] | default('N/A') }}
-      📤 **Last Sequence Applied:** {{ dg_sync_data[2] | default('N/A') }}
-      🔄 **Difference:** {{ dg_sync_data[3] | default('N/A') }}
+      **Thread:** {{ dg_sync_data[0] | default('N/A') }}
+      **Last Sequence Received:** {{ dg_sync_data[1] | default('N/A') }}
+      **Last Sequence Applied:** {{ dg_sync_data[2] | default('N/A') }}
+      **Difference:** {{ dg_sync_data[3] | default('N/A') }}
       ------------------------------------
-      ✅ **Status:** {{ 'In Sync 🎉' if dg_sync_data[3] | default('1') == '0' else 'Lagging ❌' }}
+      **Status:** {{ 'In Sync' if dg_sync_data[3] | default('1') == '0' else 'Lagging' }}
   when: inventory_hostname == standby_host and dg_sync_data is defined
