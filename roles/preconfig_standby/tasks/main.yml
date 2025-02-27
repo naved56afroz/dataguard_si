@@ -105,7 +105,7 @@
   changed_when: false
   when: inventory_hostname == standby_host 
 
-- name: Debug Pre-config Output for standby dataabse
+- name: Debug Pre-config Output for standby database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: inventory_hostname == standby_host 

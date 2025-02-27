@@ -16,35 +16,35 @@
   register: primary_output
   when: inventory_hostname == primary_host
 
-- name: Execute Data Guard sync check on Standby
-  ansible.builtin.shell: "{{ scripts_dir }}/sync_gap.sh"
-  register: standby_output
-  when: inventory_hostname == standby_host
-
 - name: Extract Primary Sequence Number
   ansible.builtin.set_fact:
-    primary_seq: "{{ (primary_output.stdout | regex_search('PRIMARY_SEQ\\s+(\\d+)'))[0] | default('') }}"
+    primary_seq: "{{ (primary_output.stdout | regex_search('PRIMARY_SEQ:\\s*(\\d+)', '\\1')) }}"
   when:
     - inventory_hostname == primary_host
     - primary_output.stdout is defined
 
 - name: debug Primary Sequence Number
   ansible.builtin.debug:
-    msg: primary_output.stdout
+    msg: "{{ primary_output.stdout }}"
   when:
     - inventory_hostname == primary_host
     - primary_output.stdout is defined
 
+- name: Execute Data Guard sync check on Standby
+  ansible.builtin.shell: "{{ scripts_dir }}/sync_gap.sh"
+  register: standby_output
+  when: inventory_hostname == standby_host
+  
 - name: Extract Standby Sequence Number
   ansible.builtin.set_fact:
-    standby_seq: "{{ (standby_output.stdout | regex_search('STANDBY_SEQ\\s+(\\d+)'))[0] | default('') }}"
+    standby_seq: "{{ (standby_output.stdout | regex_search('STANDBY_SEQ:\\s*(\\d+)', '\\1')) }}"
   when: 
     - inventory_hostname == standby_host
     - standby_output.stdout_lines is defined
 
 - name: debug Standby Sequence Number
   ansible.builtin.debug:
-    msg: standby_output.stdout
+    msg: "{{ standby_output.stdout }}"
   when: 
     - inventory_hostname == standby_host
     - standby_output.stdout_lines is defined
@@ -55,12 +55,18 @@
     standby_seq: "{{ hostvars[standby_host].standby_seq }}"
   when: inventory_hostname == primary_host
 
-- name: Fail if Data Guard is out of sync
-  ansible.builtin.fail:
-    msg: "Data Guard is not in sync! Primary: Please check Manually  {{ primary_seq }}, Standby: {{ standby_seq }}"
+- name: debug Standby and primary Sequence Number
+  ansible.builtin.debug:
+    msg: "Primary:  {{ primary_seq }}, Standby: {{ standby_seq }}"
   when:
     - inventory_hostname == primary_host
-    - primary_seq | default('') != standby_seq | default('')
+
+- name: Fail if Data Guard is out of sync
+  ansible.builtin.fail:
+    msg: "Data Guard is not in sync! Please check Manually ! Primary:  {{ primary_seq }}, Standby: {{ standby_seq }}"
+  when:
+    - inventory_hostname == primary_host
+    - primary_seq != standby_seq
   run_once: true
 
 # Run Data Guard Sync Check Query on Standby
