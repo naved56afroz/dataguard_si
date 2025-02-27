@@ -23,13 +23,17 @@
 
 - name: Extract Primary Sequence Number
   ansible.builtin.set_fact:
-    primary_seq: "{{ primary_output.stdout_lines | regex_search('PRIMARY_SEQ\\s+(\\d+)', '\\1') | first }}"
-  when: inventory_hostname == primary_host
+    primary_seq: "{{ (primary_output.stdout_lines | regex_search('PRIMARY_SEQ\\s+(\\d+)', '\\1')) | default([]) | first }}"
+  when: 
+    - inventory_hostname == primary_host
+    - primary_output.stdout_lines is defined
 
 - name: Extract Standby Sequence Number
   ansible.builtin.set_fact:
-    standby_seq: "{{ standby_output.stdout_lines | regex_search('STANDBY_SEQ\\s+(\\d+)', '\\1') | first }}"
-  when: inventory_hostname == standby_host
+    standby_seq: "{{ (standby_output.stdout_lines | regex_search('STANDBY_SEQ\\s+(\\d+)', '\\1')) | default([]) | first }}"
+  when: 
+    - inventory_hostname == standby_host
+    - standby_output.stdout_lines is defined
 
 - name: Fail if Data Guard is out of sync
   ansible.builtin.fail:
