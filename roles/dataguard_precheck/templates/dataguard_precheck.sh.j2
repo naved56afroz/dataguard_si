@@ -1,0 +1,93 @@
+#!/bin/bash
+
+export ORACLE_SID={{ databases[database_name].oracle_db_sid }}
+export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
+export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
+
+MASTER_LOG="{{ done_dir }}/dataguard_precheck.log"
+FAILURE_LOG="{{ done_dir }}/failure_check.log"
+
+# Ensure log files are empty before running
+> "$MASTER_LOG"
+> "$FAILURE_LOG"
+
+# Run all queries in a single SQL*Plus session
+su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee "$MASTER_LOG"
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET LINESIZE 1000
+SET TRIMOUT ON
+SET TRIMSPOOL ON
+
+-- Precheck 1: ARCHIVELOG mode
+SELECT 'ARCHIVELOG_MODE:' || log_mode FROM v\$database;
+
+#-- Precheck 2: ASM & OMF check
+#SELECT 'ASM_COUNT:' || COUNT(*) FROM v\$asm_diskgroup;
+#SELECT 'OMF_PATH:' || NVL(value, 'NULL') FROM v\$parameter WHERE name='db_create_file_dest';
+
+-- Precheck 3: Redo log sizes
+SELECT 'REDO_SIZES:' || LISTAGG(bytes, ',') WITHIN GROUP (ORDER BY group#) FROM v\$log;
+
+-- Precheck 4: Redo logs multiplexing
+SELECT 'MULTIPLEX_CHECK:' || COUNT(*) FROM v\$logfile lf JOIN v\$log l ON lf.group# = l.group# GROUP BY lf.group# HAVING COUNT(*) < 2;
+
+#-- Precheck 5:Check SPFILE file in ASM
+#SELECT 'SPFILE_CHECK:' || COUNT(*) FROM v\$parameter where name in ('spfile') and value like '+%';
+
+#-- Precheck 5:Check Password file in ASM
+#ALTER SYSTEM FLUSH PASSWORDFILE_METADATA_CACHE;
+#SELECT 'PWD_FILE_CHECK:' || IS_ASM FROM v\$passwordfile_info ;
+SQL
+
+# Extracting values using grep and awk
+ARCHIVELOG_MODE=$(grep "ARCHIVELOG_MODE:" "$MASTER_LOG" | awk -F ':' '{print $2}')
+#ASM_COUNT=$(grep "ASM_COUNT:" "$MASTER_LOG" | awk -F ':' '{print $2}')
+#OMF_PATH=$(grep "OMF_PATH:" "$MASTER_LOG" | awk -F ':' '{print $2}')
+REDO_SIZES=$(grep "REDO_SIZES:" "$MASTER_LOG" | awk -F ':' '{print $2}')
+MULTIPLEX_CHECK=$(grep "MULTIPLEX_CHECK:" "$MASTER_LOG")
+#SPFILE_CHECK=$(grep "SPFILE_CHECK:" "$MASTER_LOG")
+#PWD_FILE_CHECK=$(grep "PWD_FILE_CHECK:" "$MASTER_LOG" | awk -F ':' '{print $2}')
+
+# 1. Validate ARCHIVELOG mode
+if [[ "$ARCHIVELOG_MODE" != "ARCHIVELOG" ]]; then
+    echo "ERROR: Database is NOT in ARCHIVELOG mode!" | tee -a "$FAILURE_LOG"
+fi
+
+# 2. Validate ASM & OMF
+#if [[ "$ASM_COUNT" -eq 0 || "$OMF_PATH" == "NULL" ]]; then
+#    echo "ERROR: Database does not use ASM or OMF!" | tee -a "$FAILURE_LOG"
+#fi
+
+# 3. Validate redo log sizes are identical
+UNIQUE_SIZES=$(echo "$REDO_SIZES" | tr ',' '\n' | sort -u | wc -l)
+if [[ "$UNIQUE_SIZES" -gt 1 ]]; then
+    echo "ERROR: Redo log sizes are not identical!" | tee -a "$FAILURE_LOG"
+fi
+
+# 4. Validate redo log multiplexing
+if [[ -n "$MULTIPLEX_CHECK" ]]; then
+    echo "ERROR: Redo logs are NOT multiplexed!" | tee -a "$FAILURE_LOG"
+fi
+
+# 5. Validate SPFILE file in ASM
+#if [[ "$SPFILE_CHECK" -eq 0 ]]; then
+#    echo "ERROR: SPFILE NOT in ASM! Please move the SPFILE to ASM and retry" | tee -a "$FAILURE_LOG"
+#fi
+
+# 6. Validate Password file is present in ASM
+#if [[ "$PWD_FILE_CHECK" != "TRUE" ]]; then
+#    echo "ERROR: Database password file is NOT in ASM!  Please move the password file to ASM and retry" | tee -a "$FAILURE_LOG"
+#fi
+
+# 5. Check for failures and exit accordingly
+if [[ -s "$FAILURE_LOG" ]]; then
+    cat "$FAILURE_LOG"
+    rm -f "$FAILURE_LOG"
+    exit 1
+fi
+
+echo "All pre-checks passed for primary database successfully!"
+rm -f "$FAILURE_LOG"
+exit 0

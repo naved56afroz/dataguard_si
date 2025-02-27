@@ -1,0 +1,37 @@
+---
+# Copyright (c) IBM Corporation 2021
+# tasks file for sync_gap
+
+- name: Copy Data Guard sync script to primary and standby
+  ansible.builtin.template:
+    src: sync_gap.sh.j2
+    dest: "{{ scripts_dir }}/sync_gap.sh"
+    mode: '0755'
+
+- name: Execute Data Guard sync check on Primary
+  ansible.builtin.shell: "{{ scripts_dir }}/sync_gap.sh"
+  register: primary_output
+  when: inventory_hostname == primary_host
+
+- name: Execute Data Guard sync check on Standby
+  ansible.builtin.shell: "{{ scripts_dir }}/sync_gap.sh"
+  register: standby_output
+  when: inventory_hostname == standby_host
+
+- name: Extract Primary Sequence Number
+  ansible.builtin.set_fact:
+    primary_seq: "{{ primary_output.stdout_lines | regex_search('PRIMARY_SEQ\\s+(\\d+)', '\\1') | first }}"
+  when: inventory_hostname == primary_host
+
+- name: Extract Standby Sequence Number
+  ansible.builtin.set_fact:
+    standby_seq: "{{ standby_output.stdout_lines | regex_search('STANDBY_SEQ\\s+(\\d+)', '\\1') | first }}"
+  when: inventory_hostname == standby_host
+
+- name: Fail if Data Guard is out of sync
+  ansible.builtin.fail:
+    msg: "Data Guard is not in sync! Primary: {{ primary_seq }}, Standby: {{ standby_seq }}"
+  when: 
+    - inventory_hostname == primary_host
+    - primary_seq != standby_seq
+  run_once: true

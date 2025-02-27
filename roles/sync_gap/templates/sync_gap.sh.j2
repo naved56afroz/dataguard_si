@@ -1,0 +1,54 @@
+#!/bin/bash
+
+MASTER_LOG="{{ done_dir }}/dg_sync.log"
+FAILURE_LOG="{{ done_dir }}/dg_sync_failure.log"
+
+# Ensure log files are empty before running
+> "$MASTER_LOG"
+> "$FAILURE_LOG"
+
+if [[ "$(hostname -s)" == "{{ primary_host }}" ]]; then
+
+# Primary
+export ORACLE_SID={{ databases.primary.oracle_db_sid }}
+export ORACLE_HOME={{ databases.primary.oracle_db_home }}
+export PATH={{ databases.primary.oracle_db_home }}/bin:$PATH
+
+su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
+alter system set log_archive_dest_state_2='DEFER' scope=both sid='*';
+alter system set log_archive_dest_state_2='ENABLE' scope=both sid='*';
+alter system switch logfile;
+alter system switch logfile;
+alter system switch logfile;
+SELECT MAX(SEQUENCE#) AS PRIMARY_SEQ FROM V\$ARCHIVED_LOG WHERE APPLIED='YES';
+SELECT STATUS, ERROR FROM GV\$ARCHIVE_DEST WHERE DEST_ID=2;
+SQL
+
+PRIMARY_SEQ=$(grep "PRIMARY_SEQ" "$MASTER_LOG" | awk '{print $2}')
+STATUS=$(grep "STATUS" "$MASTER_LOG" | awk '{print $2}')
+ERROR=$(grep "ERROR" "$MASTER_LOG" | awk '{print $2}')
+
+elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
+
+# Standby
+export ORACLE_SID={{ databases.standby.oracle_db_sid }}
+export ORACLE_HOME={{ databases.standby.oracle_db_home }}
+export PATH={{ databases.standby.oracle_db_home }}/bin:$PATH
+
+su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
+SELECT MAX(SEQUENCE#) AS STANDBY_SEQ FROM V\$ARCHIVED_LOG WHERE APPLIED='YES';
+SQL
+
+STANDBY_SEQ=$(grep "STANDBY_SEQ" "$MASTER_LOG" | awk '{print $2}')
+
+fi
+
+Check for failures and exit accordingly
+if [[ -s "$FAILURE_LOG" ]]; then
+    cat "$FAILURE_LOG"
+    rm -f "$FAILURE_LOG"
+    exit 1
+fi
+
+rm -f "$FAILURE_LOG"
+exit 0
