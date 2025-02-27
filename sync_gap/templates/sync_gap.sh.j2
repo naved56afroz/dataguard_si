@@ -92,14 +92,14 @@ elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
             SET LINESIZE 1000
             SET TRIMOUT ON
             SET TRIMSPOOL ON
-        
+
             SELECT 'STANDBY_SEQ:' || SEQUENCE# FROM V\$MANAGED_STANDBY WHERE PROCESS='MRP0';
         SQL
         fi    
     STANDBY_SEQ=$(grep "STANDBY_SEQ:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
 fi
 
-Check for failures and exit accordingly
+#Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"
