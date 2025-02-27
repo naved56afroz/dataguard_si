@@ -20,13 +20,13 @@ alter system set log_archive_dest_state_2='ENABLE' scope=both sid='*';
 alter system switch logfile;
 alter system switch logfile;
 alter system switch logfile;
-select SEQUENCE# AS PRIMARY_SEQ from v\$log where STATUS='CURRENT';
-SELECT STATUS as STATUS, ERROR as ERROR FROM V\$ARCHIVE_DEST WHERE DEST_ID=2;
+SELECT 'PRIMARY_SEQ:' || SEQUENCE# FROM V\$LOG WHERE STATUS='CURRENT';
+SELECT 'STATUS:' || STATUS || ',ERROR:' || ERROR FROM V\$ARCHIVE_DEST WHERE DEST_ID=2;
 SQL
 
-PRIMARY_SEQ=$(grep "PRIMARY_SEQ" "$MASTER_LOG" | awk '{print $2}')
-STATUS=$(grep "STATUS" "$MASTER_LOG" | awk '{print $2}')
-ERROR=$(grep "ERROR" "$MASTER_LOG" | awk '{print $2}')
+PRIMARY_SEQ=$(grep "PRIMARY_SEQ:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
+STATUS=$(grep "STATUS:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
+ERROR=$(grep "ERROR:" "$MASTER_LOG" | awk -F '[:,]' '{print $4}')
 
 # Validate Data Guard Synchronization
 if [[ "$STATUS" == "VALID" && -z "$ERROR" ]]; then
