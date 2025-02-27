@@ -5,7 +5,7 @@
   ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
   when: not init_done is defined
 
-- name: Copy Data Guard sync script to primary
+- name: Copy Data Guard sync check script to primary
   ansible.builtin.template:
     src: check_sync.sh.j2
     dest: "{{ scripts_dir }}/check_sync.sh"
@@ -15,7 +15,7 @@
   when: 
       - inventory_hostname == primary_host 
 
-- name: Copy Data Guard sync script to standby
+- name: Copy Data Guard sync check script to standby
   ansible.builtin.template:
     src: check_sync.sh.j2
     dest: "{{ scripts_dir }}/check_sync.sh"
