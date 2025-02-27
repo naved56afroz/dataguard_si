@@ -20,13 +20,26 @@ alter system set log_archive_dest_state_2='ENABLE' scope=both sid='*';
 alter system switch logfile;
 alter system switch logfile;
 alter system switch logfile;
-SELECT MAX(SEQUENCE#) AS PRIMARY_SEQ FROM V\$ARCHIVED_LOG WHERE APPLIED='YES';
-SELECT STATUS, ERROR FROM GV\$ARCHIVE_DEST WHERE DEST_ID=2;
+select SEQUENCE# AS PRIMARY_SEQ from v\$log where STATUS='CURRENT';
+SELECT STATUS, ERROR FROM V\$ARCHIVE_DEST WHERE DEST_ID=2;
 SQL
 
 PRIMARY_SEQ=$(grep "PRIMARY_SEQ" "$MASTER_LOG" | awk '{print $2}')
 STATUS=$(grep "STATUS" "$MASTER_LOG" | awk '{print $2}')
 ERROR=$(grep "ERROR" "$MASTER_LOG" | awk '{print $2}')
+
+# Validate Data Guard Synchronization
+if [[ "$STATUS" == "VALID" && -z "$ERROR" ]]; then
+    echo "Primary database sync status is valid" | tee -a "$MASTER_LOG"
+    rm -f "$FAILURE_LOG"
+    exit 0
+else
+    echo "ERROR: Data Guard out of sync or error detected!" | tee -a "$FAILURE_LOG"
+    echo "Status: $STATUS" | tee -a "$FAILURE_LOG"
+    echo "Error: $ERROR" | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
 
 elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
 
@@ -36,7 +49,7 @@ export ORACLE_HOME={{ databases.standby.oracle_db_home }}
 export PATH={{ databases.standby.oracle_db_home }}/bin:$PATH
 
 su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
-SELECT MAX(SEQUENCE#) AS STANDBY_SEQ FROM V\$ARCHIVED_LOG WHERE APPLIED='YES';
+select SEQUENCE# AS STANDBY_SEQ from v\$managed_standby where PROCESS='MRP0';
 SQL
 
 STANDBY_SEQ=$(grep "STANDBY_SEQ" "$MASTER_LOG" | awk '{print $2}')

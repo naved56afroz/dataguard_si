@@ -179,7 +179,7 @@ EOF
 $ORACLE_HOME/bin/tnsping orcl | grep "Attempting to contact" > {{ done_dir }}/tns_info.txt
 PRIMARY_PORT=$(grep "Attempting to contact" {{ done_dir }}/tns_info.txt | sed -n 's/.*PORT *= *\([^)]*\)).*/\1/p')
 PRIMARY_SERVICE_NAME=$(grep "Attempting to contact" {{ done_dir }}/tns_info.txt | sed -n 's/.*SERVICE_NAME *= *\([^)]*\)).*/\1/p')
-STANDBY_SERVICE_NAME="${PRIMARY_SERVICE_NAME}DR"
+STANDBY_SERVICE_NAME="${STANDBY_UNIQUE_NAME}"
 
 # Define the new entry
 NEW_ENTRY="$STANDBY_UNIQUE_NAME=
