@@ -79,7 +79,7 @@
 - name: Extract Data Guard Sync Status
   ansible.builtin.set_fact:
     dg_sync_data: "{{ dg_sync_status.stdout_lines | select('match', '^\\s*\\d+\\s+\\d+\\s+\\d+\\s+\\d+') | list | first | split() }}"
-  when: inventory_hostname == standby_host and dg_sync_status.stdout_lines | length = 4
+  when: inventory_hostname == standby_host and dg_sync_status.stdout_lines | length == 4
 
 # Print Data Guard Sync Status (with Safe Parsing)
 - name: Print Data Guard Sync Status
