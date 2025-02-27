@@ -102,6 +102,7 @@
       {% else %}
       ❌ **Status:** Out of Sync! Check logs. ⚠️
       {% endif %}
+  when: inventory_hostname == standby_host and dg_sync_data is defined
       
 # Print Data Guard Sync Status (with Safe Parsing)
 - name: Print Data Guard Sync Status
