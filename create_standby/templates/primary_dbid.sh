@@ -36,7 +36,7 @@ fi
 # Print only the DBID (for Ansible to capture correctly)
 echo "$PRIMARY_DBID"
 
-Check for failures and exit accordingly
+#Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"

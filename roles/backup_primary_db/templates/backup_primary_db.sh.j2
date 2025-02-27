@@ -25,7 +25,6 @@ RUN {
     ALLOCATE CHANNEL ch3 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
     ALLOCATE CHANNEL ch4 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
     
-    
     # Backup full database with a distinct tag
     BACKUP DATABASE FORMAT '{{ backup_format }}' TAG '{{ fullbackup_tag }}' PLUS ARCHIVELOG;
     
@@ -52,7 +51,7 @@ else
     exit 1
 fi
 
-Check for failures and exit accordingly
+#Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"

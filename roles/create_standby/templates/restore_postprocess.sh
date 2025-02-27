@@ -78,7 +78,7 @@ SQL
 touch "{{ done_dir }}/dataguard.success"
 fi
 
-Check for failures and exit accordingly
+#Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"
