@@ -87,6 +87,22 @@
     dg_sync_data: "{{ dg_sync_status.stdout_lines | select('match', '^\\s*\\d+\\s+\\d+\\s+\\d+\\s+\\d+') | list | first | split() }}"
   when: inventory_hostname == standby_host and dg_sync_status.stdout_lines | length == 4
 
+- name: Print Data Guard Sync Status
+  ansible.builtin.debug:
+    msg: |
+      🌟 **Data Guard Sync Check** 🌟
+      ------------------------------------
+      🗂 **Thread:** {{ thread }}
+      📩 **Last Sequence Received:** {{ last_received }}
+      📤 **Last Sequence Applied:** {{ last_applied }}
+      🔄 **Difference:** {{ difference }}
+      ------------------------------------
+      {% if difference == 0 %}
+      ✅ **Status:** In Sync 🎉
+      {% else %}
+      ❌ **Status:** Out of Sync! Check logs. ⚠️
+      {% endif %}
+      
 # Print Data Guard Sync Status (with Safe Parsing)
 - name: Print Data Guard Sync Status
   ansible.builtin.debug:
