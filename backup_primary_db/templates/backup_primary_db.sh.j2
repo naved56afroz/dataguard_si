@@ -25,7 +25,6 @@ RUN {
     ALLOCATE CHANNEL ch3 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
     ALLOCATE CHANNEL ch4 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
     
-    
     # Backup full database with a distinct tag
     BACKUP DATABASE FORMAT '{{ backup_format }}' TAG '{{ fullbackup_tag }}' PLUS ARCHIVELOG;
     
