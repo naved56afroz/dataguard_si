@@ -14,7 +14,9 @@
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: dataguarddone.stat.exists
+  when: 
+      - dataguarddone.stat.exists
+      - inventory_hostname == standby_host
   run_once: true
 
 - name: End play if Dataguard setup Task was done
