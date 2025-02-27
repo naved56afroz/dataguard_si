@@ -1,7 +1,10 @@
 ---
 # Copyright (c) IBM Corporation 2021
 # tasks file for sync_gap
-
+- name: Run initialization tasks
+  ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
+  when: not init_done is defined
+  
 - name: Copy Data Guard sync script to primary and standby
   ansible.builtin.template:
     src: sync_gap.sh.j2
