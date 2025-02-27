@@ -230,6 +230,7 @@ sql_exit_code=$?
 # Check if the SQL command was successful
 if [ $sql_exit_code -eq 0 ]; then
     echo "DB initialization parameter set completed successfully." | tee -a $MASTER_LOG
+    touch "{{ done_dir }}/primary_preconfig.success"
 else
     echo "DB initialization parameter failed! Check logs for details: $MASTER_LOG" | tee -a "$FAILURE_LOG"
     exit 1

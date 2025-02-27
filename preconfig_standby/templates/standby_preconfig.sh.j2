@@ -97,4 +97,5 @@ fi
 echo "Standby PFILE,PWD file copied, and TNS entries updated."
 echo "All pre-config performed for standby database successfully!"
 rm -f "$FAILURE_LOG"
+touch "{{ done_dir }}/standby_preconfig.success"
 exit 0

@@ -9,7 +9,7 @@
   ansible.builtin.stat:
     path: "{{ done_dir }}/dataguard.success"
   register: dataguarddone
-  when: inventory_hostname == primary_host
+  when: inventory_hostname == standby_host
 
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:

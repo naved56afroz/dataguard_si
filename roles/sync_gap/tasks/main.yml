@@ -4,7 +4,62 @@
 - name: Run initialization tasks
   ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
   when: not init_done is defined
-  
+
+- name: Copy Data Guard sync script to primary
+  ansible.builtin.template:
+    src: check_sync.sh.j2
+    dest: "{{ scripts_dir }}/check_sync.sh"
+    mode: '0755'
+  vars: 
+     database_name: "primary"
+  when: 
+      - inventory_hostname == primary_host 
+
+- name: Copy Data Guard sync script to standby
+  ansible.builtin.template:
+    src: check_sync.sh.j2
+    dest: "{{ scripts_dir }}/check_sync.sh"
+    mode: '0755'
+  vars: 
+     database_name: "standby"
+  when: 
+      - inventory_hostname == standby_host 
+
+- name: Execute Data Guard sync check on Primary
+  ansible.builtin.shell: "{{ scripts_dir }}/check_sync.sh"
+  register: primary_seq
+  when: inventory_hostname == primary_host
+
+- name: Execute Data Guard sync check on Standby
+  ansible.builtin.shell: "{{ scripts_dir }}/check_sync.sh"
+  register: standby_seq
+  when: inventory_hostname == standby_host
+
+# Store Standby Sequence on Primary Host
+- name: Fetch Standby Sequence on Primary
+  ansible.builtin.set_fact:
+    standby_seq: "{{ hostvars[standby_host].standby_seq }}"
+  when: inventory_hostname == primary_host
+
+- name: Compare sequence numbers between primary and standby
+  ansible.builtin.set_fact:
+    is_synced: "{{ primary_seq.stdout | trim == standby_seq.stdout | trim }}"
+  when: inventory_hostname == primary_host
+  run_once: true
+
+- name: Display message if standby is in sync
+  ansible.builtin.debug:
+    msg: "Standby is in sync with Primary. Ending play gracefully."
+  when: is_synced | bool
+
+- name: End play if standby is in sync with primary
+  ansible.builtin.meta: end_play
+  when: is_synced | bool
+
+- name: Continue if standby is not in sync
+  ansible.builtin.debug:
+    msg: "Standby is not in sync with Primary. Proceeding with further actions."
+
 - name: Copy Data Guard sync script to primary and standby
   ansible.builtin.template:
     src: sync_gap.sh.j2

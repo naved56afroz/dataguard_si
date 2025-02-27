@@ -9,7 +9,7 @@
   ansible.builtin.stat:
     path: "{{ done_dir }}/dataguard.success"
   register: dataguarddone
-  when: inventory_hostname == primary_host
+  when: inventory_hostname == standby_host
 
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
@@ -21,45 +21,6 @@
   ansible.builtin.meta: end_play
   when: dataguarddone.stat.exists
   run_once: true
-
-- name: Create Audit Directory
-  ansible.builtin.file:
-    path: "{{ databases.standby.oracle_db_base }}/admin/{{ databases.standby.oracle_db_unique_name }}/adump"
-    state: directory
-    owner: "{{ db_oracle_user }}"
-    group: "{{ db_oinstall_group }}"
-    mode: '0755'
-  when: inventory_hostname == standby_host
-
-- name: Copy password file to $ORACLE_HOME/dbs
-  ansible.builtin.copy:
-    src: "{{ scripts_dir }}/orapw{{ databases.standby.oracle_db_sid }}"  # Update with actual file name
-    dest: "{{ databases.standby.oracle_db_home }}/dbs"
-    owner: "{{ db_oracle_user }}"
-    group: "{{ db_oinstall_group }}"
-    remote_src: yes
-    mode: '0640'
-  when: inventory_hostname == standby_host
-
-- name: Copy tnsnames.ora to $ORACLE_HOME/network/admin
-  ansible.builtin.copy:
-    src: "{{ scripts_dir }}/tnsnames.ora"  # Update with actual file name
-    dest: "{{ databases.standby.oracle_db_home }}/network/admin"
-    owner: "{{ db_oracle_user }}"
-    group: "{{ db_oinstall_group }}"
-    remote_src: yes
-    mode: '0640'
-  when: inventory_hostname == standby_host
-
-- name: Copy standby pfile
-  ansible.builtin.copy:
-    src: "{{ scripts_dir }}/standby.pfile"  # Update with actual file name
-    dest: "{{ databases.standby.oracle_db_home }}/dbs"
-    owner: "{{ db_oracle_user }}"
-    group: "{{ db_oinstall_group }}"
-    remote_src: yes
-    mode: '0644'
-  when: inventory_hostname == standby_host  
 
 - name: Copy DISKGROUP script from primary database
   ansible.builtin.template:
@@ -88,6 +49,59 @@
   when: 
       - inventory_hostname == standby_host and hostvars[primary_host].standby_diskgroup is defined
 
+- name: Checking if Standby pre configure was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/standby_preconfig.success"
+  register: standbypreconfigdone
+  when: inventory_hostname == standby_host
+
+- name: Create Audit Directory
+  ansible.builtin.file:
+    path: "{{ databases.standby.oracle_db_base }}/admin/{{ databases.standby.oracle_db_unique_name }}/adump"
+    state: directory
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    mode: '0755'
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
+
+- name: Copy password file to $ORACLE_HOME/dbs
+  ansible.builtin.copy:
+    src: "{{ scripts_dir }}/orapw{{ databases.standby.oracle_db_sid }}"  # Update with actual file name
+    dest: "{{ databases.standby.oracle_db_home }}/dbs"
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    remote_src: yes
+    mode: '0640'
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
+
+- name: Copy tnsnames.ora to $ORACLE_HOME/network/admin
+  ansible.builtin.copy:
+    src: "{{ scripts_dir }}/tnsnames.ora"  # Update with actual file name
+    dest: "{{ databases.standby.oracle_db_home }}/network/admin"
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    remote_src: yes
+    mode: '0640'
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
+
+- name: Copy standby pfile
+  ansible.builtin.copy:
+    src: "{{ scripts_dir }}/standby.pfile"  # Update with actual file name
+    dest: "{{ databases.standby.oracle_db_home }}/dbs"
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    remote_src: yes
+    mode: '0644'
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
+
 - name: Copy Dataguard Pre-config script for standby
   ansible.builtin.template:
     src: standby_preconfig.sh.j2
@@ -96,19 +110,25 @@
   vars:
     database_name: "standby"
     primary_diskgroup: "{{ standby_diskgroup }}"
-  when: inventory_hostname == standby_host 
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
   
 - name: Execute Dataguard Pre-config script on standby
   ansible.builtin.shell: "{{ scripts_dir }}/standby_preconfig.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
-  when: inventory_hostname == standby_host 
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
 
 - name: Debug Pre-config Output for standby database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
-  when: inventory_hostname == standby_host 
+  when: 
+      - inventory_hostname == standby_host 
+      - standbypreconfigdone.stat.exists
 
 
 
