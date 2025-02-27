@@ -31,7 +31,6 @@
 - name: Execute RMAN backup script on primary
   ansible.builtin.shell: "{{ scripts_dir }}/backup_primary_db.sh"
   register: precheck_output
-  changed_when: false
   when: 
       - inventory_hostname == primary_host 
       - not rmandone.stat.exists | default(false)
