@@ -28,22 +28,12 @@
     - inventory_hostname == primary_host
     - primary_output.stdout is defined
 
-- name: Debug Primary Output
-  debug:
-    var: primary_output.stdout
-  when: inventory_hostname == primary_host
-
 - name: Extract Standby Sequence Number
   ansible.builtin.set_fact:
     standby_seq: "{{ (standby_output.stdout | regex_search('STANDBY_SEQ\\s+(\\d+)'))[0] | default('') }}"
   when: 
     - inventory_hostname == standby_host
     - standby_output.stdout_lines is defined
-
-- name: Debug Standby Output
-  debug:
-    var: standby_output.stdout
-  when: inventory_hostname == standby_host
 
 # Store Standby Sequence on Primary Host
 - name: Fetch Standby Sequence on Primary
@@ -53,8 +43,48 @@
 
 - name: Fail if Data Guard is out of sync
   ansible.builtin.fail:
-    msg: "Data Guard is not in sync! Primary: {{ primary_seq }}, Standby: {{ standby_seq }}"
+    msg: "Data Guard is not in sync! Primary: Please check Manually  {{ primary_seq }}, Standby: {{ standby_seq }}"
   when:
     - inventory_hostname == primary_host
     - primary_seq | default('') != standby_seq | default('')
   run_once: true
+
+# Run Data Guard Sync Check Query on Standby
+- name: Query Data Guard Sync Status on Standby
+  ansible.builtin.shell: |
+    su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL
+    SET LINESIZE 200;
+    SET PAGESIZE 50;
+    COL THREAD# FORMAT 99;
+    COL "Last Sequence Received" FORMAT 99999;
+    COL "Last Sequence Applied" FORMAT 99999;
+    COL "Difference" FORMAT 99999;
+    SELECT ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last Sequence Received", 
+           APPL.SEQUENCE# "Last Sequence Applied", 
+           (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference"
+    FROM 
+      (SELECT THREAD#, SEQUENCE# FROM V\$ARCHIVED_LOG 
+       WHERE (THREAD#, FIRST_TIME) IN 
+       (SELECT THREAD#, MAX(FIRST_TIME) FROM V\$ARCHIVED_LOG GROUP BY THREAD#)) ARCH,
+      (SELECT THREAD#, SEQUENCE# FROM V\$LOG_HISTORY 
+       WHERE (THREAD#, FIRST_TIME) IN 
+       (SELECT THREAD#, MAX(FIRST_TIME) FROM V\$LOG_HISTORY GROUP BY THREAD#)) APPL
+    WHERE ARCH.THREAD# = APPL.THREAD# 
+    ORDER BY 1;
+    SQL
+  register: dg_sync_status
+  when: inventory_hostname == standby_host
+
+# Print a Beautiful Message
+- name: Print Data Guard Sync Status
+  ansible.builtin.debug:
+    msg: |
+      **Data Guard Sync Check**
+      ------------------------------------
+      **Thread:** {{ dg_sync_status.stdout_lines[4].split()[0] }}
+      **Last Sequence Received:** {{ dg_sync_status.stdout_lines[4].split()[1] }}
+      **Last Sequence Applied:** {{ dg_sync_status.stdout_lines[4].split()[2] }}
+      **Difference:** {{ dg_sync_status.stdout_lines[4].split()[3] }}
+      ------------------------------------
+      **Status:** {{ 'In Sync ' if dg_sync_status.stdout_lines[4].split()[3] == '0' else 'Lagging' }}
+  when: inventory_hostname == standby_host
