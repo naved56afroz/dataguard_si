@@ -69,7 +69,7 @@
     standby_diskgroup: "{{ primary_diskgroup }}"
   when: 
       - inventory_hostname == primary_host 
-      - primarypreconfigdone.stat.exists
+      - not primarypreconfigdone.stat.exists
 
 - name: Execute Dataguard Pre-config script on primary
   ansible.builtin.shell: "{{ scripts_dir }}/primary_preconfig.sh"
@@ -78,14 +78,14 @@
   changed_when: false
   when: 
       - inventory_hostname == primary_host 
-      - primarypreconfigdone.stat.exists
+      - not primarypreconfigdone.stat.exists
 
 - name: Debug Pre-config Output for primary dataabse
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 
       - inventory_hostname == primary_host 
-      - primarypreconfigdone.stat.exists
+      - not primarypreconfigdone.stat.exists
 
 
 

@@ -70,7 +70,7 @@
     database_name: "primary"
   when: 
         - inventory_hostname == primary_host 
-        - drprecheckdone.stat.exists
+        - not drprecheckdone.stat.exists
 
 - name: Execute Dataguard Pre-check script on primary
   ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
@@ -79,14 +79,14 @@
   changed_when: false
   when: 
         - inventory_hostname == primary_host 
-        - drprecheckdone.stat.exists
+        - not drprecheckdone.stat.exists
 
 - name: Debug Pre-check Output for primary dataabse
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 
         - inventory_hostname == primary_host 
-        - drprecheckdone.stat.exists
+        - not drprecheckdone.stat.exists
 
 ## check only from DB home 
 

@@ -68,7 +68,7 @@
     mode: '0755'
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 - name: Copy password file to $ORACLE_HOME/dbs
   ansible.builtin.copy:
@@ -80,7 +80,7 @@
     mode: '0640'
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 - name: Copy tnsnames.ora to $ORACLE_HOME/network/admin
   ansible.builtin.copy:
@@ -92,7 +92,7 @@
     mode: '0640'
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 - name: Copy standby pfile
   ansible.builtin.copy:
@@ -104,7 +104,7 @@
     mode: '0644'
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 - name: Copy Dataguard Pre-config script for standby
   ansible.builtin.template:
@@ -116,7 +116,7 @@
     primary_diskgroup: "{{ standby_diskgroup }}"
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
   
 - name: Execute Dataguard Pre-config script on standby
   ansible.builtin.shell: "{{ scripts_dir }}/standby_preconfig.sh"
@@ -125,14 +125,14 @@
   changed_when: false
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 - name: Debug Pre-config Output for standby database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 
       - inventory_hostname == standby_host 
-      - standbypreconfigdone.stat.exists
+      - not standbypreconfigdone.stat.exists
 
 
 

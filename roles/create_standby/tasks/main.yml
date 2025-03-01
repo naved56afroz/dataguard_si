@@ -41,7 +41,6 @@
       - inventory_hostname == primary_host 
       - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
-
 - name: Fetch DBID from primary database
   ansible.builtin.shell: "{{ scripts_dir }}/primary_dbid.sh"
   register: dbid_result

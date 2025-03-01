@@ -11,7 +11,7 @@ FAILURE_LOG="{{ done_dir }}/standby_rman_restore_fail.log"
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
 
-# Fetch the disk group name from primary
+# Fetch the disk group name from standby ASM
 su - {{ grid_user }} -c "sqlplus -s / as sysdba" <<SQL | tee "$MASTER_LOG"
 SET HEADING OFF
 SET FEEDBACK OFF
