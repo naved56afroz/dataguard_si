@@ -14,12 +14,16 @@
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: inventory_hostname == standby_host and dataguarddone.stat.exists 
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
-  when: inventory_hostname == standby_host and dataguarddone.stat.exists
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 - name: Checking if Dataguard restore was already done
@@ -35,7 +39,8 @@
     mode: '0755'
   when: 
       - inventory_hostname == primary_host 
-      - restoredone is not defined or (restoredone.stat.exists is not defined or not restoredone.stat.exists)  
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists
+
 
 - name: Fetch DBID from primary database
   ansible.builtin.shell: "{{ scripts_dir }}/primary_dbid.sh"
@@ -43,21 +48,21 @@
   changed_when: false
   when: 
       - inventory_hostname == primary_host 
-      - restoredone is not defined or (restoredone.stat.exists is not defined or not restoredone.stat.exists)  
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists 
 
 - name: Set DBID as fact on primary database
   ansible.builtin.set_fact:
     standby_dbid: "{{ dbid_result.stdout | trim }}"
   when: 
       - inventory_hostname == primary_host 
-      - restoredone is not defined or (restoredone.stat.exists is not defined or not restoredone.stat.exists)  
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
 - name: Fetch DBID fact from primary to standby
   ansible.builtin.set_fact:
     standby_dbid: "{{ hostvars[primary_host].standby_dbid }}"
   when: 
       - inventory_hostname == standby_host and hostvars[primary_host].standby_dbid is defined
-      - restoredone is not defined or (restoredone.stat.exists is not defined or not restoredone.stat.exists)  
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
 - name: Copy RMAN restore script for standby
   ansible.builtin.template:
@@ -93,6 +98,12 @@
   register: restoredone
   when: inventory_hostname == standby_host
 
+- name: Checking if Dataguard post restore was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/post_restore.success"
+  register: postrestoredone
+  when: inventory_hostname == standby_host
+
 - name: Copy RMAN Restore Post-Processing Script
   ansible.builtin.template:
     src: restore_postprocess.sh
@@ -101,6 +112,7 @@
   when:
        - inventory_hostname == standby_host 
        - restoredone.stat.exists
+       - not postrestoredone.stat.exists
 
 - name: Run RMAN Restore Post-Processing Script
   ansible.builtin.shell: "{{ scripts_dir }}/restore_postprocess.sh"
@@ -109,6 +121,7 @@
   when:
        - inventory_hostname == standby_host 
        - restoredone.stat.exists
+       - not postrestoredone.stat.exists
 
 - name: Display RMAN Restore Post-Processing Script Output
   ansible.builtin.debug:
@@ -116,6 +129,7 @@
   when:
        - inventory_hostname == standby_host 
        - restoredone.stat.exists
+       - not postrestoredone.stat.exists
 
 
 

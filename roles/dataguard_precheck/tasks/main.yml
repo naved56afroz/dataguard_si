@@ -14,12 +14,16 @@
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: dataguarddone.stat.exists
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
-  when: dataguarddone.stat.exists
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 # Precheck 24: Verify network connectivity between primary and standby
@@ -51,6 +55,12 @@
       - ping_standby_to_primary.rc | default(0) != 0 and ping_standby_to_primary is defined
       - inventory_hostname == standby_host
 
+- name: Checking if Dataguard setup was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/drprecheck.success"
+  register: drprecheckdone
+  when: inventory_hostname == primary_host
+
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
     src: dataguard_precheck.sh.j2
@@ -58,19 +68,25 @@
     mode: '0755'
   vars:
     database_name: "primary"
-    when: inventory_hostname == primary_host 
+  when: 
+        - inventory_hostname == primary_host 
+        - drprecheckdone.stat.exists
 
 - name: Execute Dataguard Pre-check script on primary
   ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
-  when: inventory_hostname == primary_host 
+  when: 
+        - inventory_hostname == primary_host 
+        - drprecheckdone.stat.exists
 
 - name: Debug Pre-check Output for primary dataabse
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
-  when: inventory_hostname == primary_host 
+  when: 
+        - inventory_hostname == primary_host 
+        - drprecheckdone.stat.exists
 
 ## check only from DB home 
 

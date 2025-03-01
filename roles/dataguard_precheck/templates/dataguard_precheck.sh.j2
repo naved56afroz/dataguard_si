@@ -90,4 +90,5 @@ fi
 
 echo "All pre-checks passed for primary database successfully!"
 rm -f "$FAILURE_LOG"
+touch "{{ done_dir }}/drprecheck.success"
 exit 0

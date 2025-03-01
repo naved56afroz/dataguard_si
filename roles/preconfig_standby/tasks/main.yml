@@ -14,12 +14,16 @@
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: dataguarddone.stat.exists
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
-  when: dataguarddone.stat.exists
+  when: 
+      - inventory_hostname == standby_host
+      - dataguarddone.stat.exists 
   run_once: true
 
 - name: Copy DISKGROUP script from primary database
