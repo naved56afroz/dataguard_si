@@ -9,20 +9,24 @@
   ansible.builtin.stat:
     path: "{{ done_dir }}/dataguard.success"
   register: dataguarddone
-  when: inventory_hostname == standby_host
+  delegate_to: "{{ standby_host }}"
+  run_once: true
+
+- name: Set fact if Dataguard setup was done
+  ansible.builtin.set_fact:
+    dataguard_setup_done: "{{ dataguarddone.stat.exists | default(false) }}"
+  run_once: true
 
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: 
-      - inventory_hostname == standby_host
-      - dataguarddone.stat.exists 
+  when: dataguard_setup_done
+  run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
-  when: 
-      - inventory_hostname == standby_host
-      - dataguarddone.stat.exists 
+  when: dataguard_setup_done
+  run_once: true
 
 - name: Copy DISKGROUP script from primary database
   ansible.builtin.template:
