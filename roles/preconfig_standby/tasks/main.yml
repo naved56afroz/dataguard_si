@@ -17,14 +17,12 @@
   when: 
       - inventory_hostname == standby_host
       - dataguarddone.stat.exists 
-  run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
   when: 
       - inventory_hostname == standby_host
       - dataguarddone.stat.exists 
-  run_once: true
 
 - name: Copy DISKGROUP script from primary database
   ansible.builtin.template:

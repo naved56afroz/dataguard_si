@@ -87,5 +87,5 @@ fi
 
 echo "Database restarted successfully with SPFILE."
 rm -f "$FAILURE_LOG"
-touch "{{ done_dir }}/post_restore.success"
+touch "{{ done_dir }}/dataguard.success"
 exit 0
