@@ -43,26 +43,10 @@ export ORACLE_SID={{ databases[database_name].oracle_db_sid }}
 export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
 export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
 
-# Check if the standby database is already started
-db_status=$(su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL
-SET HEAD OFF;
-SET FEEDBACK OFF;
-SELECT status FROM v\$instance;
-EXIT;
-SQL
-)
-
-# Trim any whitespace from output
-db_status=$(echo "$db_status" | tr -d '[:space:]')
-
-# Start standby DB
-
-# Trim any whitespace from output
-db_status=$(echo "$db_status" | tr -d '[:space:]')
-
-if [ "$db_status" != "STARTED" ] || [ "$db_status" != "MOUNTED" ] || [ "$db_status" != "OPEN" ] || [ "$db_status" != "OPENMIGRATE" ]; then
-    echo "Standby database is already running with status: $db_status" | tee -a "$MASTER_LOG"
-    else
+# Check if the standby database is already running by checking PMON process
+if ps -ef | grep "pmon" | grep -q "$ORACLE_SID"; then
+    echo "Standby database is already running." | tee -a "$MASTER_LOG"
+else
     echo "Starting standby database..." | tee -a "$MASTER_LOG"
     su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
     startup nomount;
