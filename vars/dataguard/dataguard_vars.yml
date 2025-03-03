@@ -23,7 +23,7 @@ standby_host: standby-db
 db_oracle_user: oracle
 grid_user: grid
 db_oinstall_group: oinstall
-with_backup: true
+with_backup: false
 backup_location: /u01/backup  
 
 databases:  
