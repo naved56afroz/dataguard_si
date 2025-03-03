@@ -67,7 +67,7 @@
 
 - name: Copy DISKGROUP script from primary database
   ansible.builtin.template:
-    src: diskgroup.sh
+    src: ../../preconfig_standby/templates/diskgroup.sh
     dest: "{{ scripts_dir }}/diskgroup.sh"
     mode: '0755'
   when: 
