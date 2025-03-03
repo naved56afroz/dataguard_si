@@ -67,9 +67,9 @@ db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_d
 audit_file_dest="'${oracle_db_base}/admin/${STANDBY_UNIQUE_NAME}/adump'"
 local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT=${PORT}))'"
 
-
-# Handling backup condition
-if [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "yes" ]]; then
+# Convert 'with_backup' variable to lowercase for consistency
+WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+if [[ "$WITH_BACKUP" == "yes" ]]; then 
 
   # Take a backup before modifying
   cp ${ORACLE_HOME}/dbs/standby.pfile "$PFILE"
@@ -102,7 +102,7 @@ EOF
   echo "Updated standby.pfile:"
   cat "$PFILE"
 
-elif [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "no" ]]; then
+elif [[ "$WITH_BACKUP" == "no" ]]; then
 
 # Insert a static entry for standby in the listener.ora file if not updated before
     if ! grep -q "${STANDBY_UNIQUE_NAME}" "$listener_file"; then

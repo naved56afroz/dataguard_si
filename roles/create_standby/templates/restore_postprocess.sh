@@ -14,8 +14,11 @@ TMP_FILE="${PFILE}.tmp"
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
 
+# Convert 'with_backup' variable to lowercase for consistency
+WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+
 # Check if RMAN Restore was successful
-if [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "yes" ]]; then 
+if [[ "$WITH_BACKUP" == "yes" ]]; then 
   if ! grep -q "Finished recover at" "$RESTORE_LOG_FILE"; then
       echo "RMAN Recover failed or incomplete. Exiting..." | tee -a "$FAILURE_LOG"
       exit 1
@@ -49,7 +52,7 @@ if [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" =
   EXIT;
 SQL
 
-elif [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "no" ]]; then
+elif [[ "$WITH_BACKUP" == "no" ]]; then
 
   # Check if media recovery is active
   
