@@ -9,6 +9,8 @@
 
 ## Section A - Common Variables
 # config_type - to specify rac or single instance values rac and si
+# with_backup - yes for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
+#             - no for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
 
 # Provide the ansible work directory on target system
 work_dir:   &work_dir "/tmp/ansible"

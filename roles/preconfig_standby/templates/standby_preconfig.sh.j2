@@ -3,17 +3,26 @@
 export ORACLE_SID=$(ps -ef | grep pmon | grep ASM | awk '{match($NF, /\+ASM[0-9]*/); print substr($NF, RSTART, RLENGTH)}')
 export ORACLE_HOME=$(awk -F: -v sid="$ORACLE_SID" '$1 == sid {print $2}' /etc/oratab)
 export PATH=$PATH:$ORACLE_HOME/bin
-PORT=$(su - grid -c "$ORACLE_HOME/bin/lsnrctl status | grep PORT | awk -F'PORT=' '{print \$2}' | awk -F')' '{print \$1}' | sort -u | head -1")
-
-
-
-
 MASTER_LOG="{{ done_dir }}/standby_preconfig.log"
 FAILURE_LOG="{{ done_dir }}/standby_preconfig_failure.log"
 
 # Ensure log files are empty before running
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
+
+if [[ -z "$ORACLE_HOME" ]]; then
+  echo "ERROR: ORACLE_HOME is not set for ASM. Check /etc/oratab and update accordingly" | tee -a "$FAILURE_LOG"
+  exit 1
+fi
+
+if su - grid -c "$ORACLE_HOME/bin/lsnrctl status" 2>&1 | grep -q "TNS-12541"; then
+  echo "ERROR: Listener is down. Start the listener and retry." | tee -a "$FAILURE_LOG"
+  exit 1
+fi
+
+# Fetch port and listener.ora file location
+PORT=$(su - grid -c "$ORACLE_HOME/bin/lsnrctl status | grep PORT | awk -F'PORT=' '{print \$2}' | awk -F')' '{print \$1}' | sort -u | head -1")
+listener_file=$(su - grid -c "$ORACLE_HOME/bin/lsnrctl status | grep \"Listener Parameter File\" | awk '{print \$NF}'")
 
 # Fetch the disk group name from standby ASM
 su - {{ grid_user }} -c "sqlplus -s / as sysdba" <<SQL | tee "$MASTER_LOG"
@@ -32,22 +41,20 @@ SQL
 DISKGROUP=$(grep "DISKGROUP:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 
 # Check if disk group was retrieved
-if [[ -z "$DISKGROUP" ]]; then
+if [[ -z "$DISKGROUP" || "$DISKGROUP" == "DISKGROUP:" ]]; then
   echo "ERROR:Failed to fetch disk group from standby ASM, verify manually and retry" | tee -a "$FAILURE_LOG"
   exit 1
 fi
 
-# Take a backup before modifying
-cp {{ databases.standby.oracle_db_home }}/dbs/standby.pfile {{ databases.standby.oracle_db_home }}/dbs/init{{ databases.standby.oracle_db_sid }}.ora
-PFILE={{ databases.standby.oracle_db_home }}/dbs/init{{ databases.standby.oracle_db_sid }}.ora
-TMP_FILE="${PFILE}.tmp"
-
 # Define values dynamically
-oracle_db_unique_name="{{ databases.standby.oracle_db_unique_name }}"
+ORACLE_HOME={{ databases.standby.oracle_db_home }}
+ORACLE_SID={{ databases.standby.oracle_db_sid }}
+PFILE=${ORACLE_HOME}/dbs/init${ORACLE_SID}.ora
 oracle_db_base="{{ databases.standby.oracle_db_base }}"
 standby_diskgroup="+${DISKGROUP}"
 primary_diskgroup={{ primary_diskgroup }}
 PRIMARY_UNIQUE_NAME="{{ databases.primary.oracle_db_unique_name }}"
+PRIMARY_DB_NAME="{{ databases.primary.oracle_db_name }}"
 STANDBY_UNIQUE_NAME="{{ databases.standby.oracle_db_unique_name }}"
 db_recovery_file_dest="{{ databases.standby.db_recovery_file_dest }}"
 db_recovery_file_dest_size="{{ databases.standby.db_recovery_file_dest_size }}"
@@ -57,15 +64,23 @@ log_archive_config="'DG_CONFIG=(${STANDBY_UNIQUE_NAME},${PRIMARY_UNIQUE_NAME})'"
 control_files="'${standby_diskgroup}'"
 log_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
 db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
-audit_file_dest="'${oracle_db_base}/admin/${oracle_db_unique_name}/adump'"
+audit_file_dest="'${oracle_db_base}/admin/${STANDBY_UNIQUE_NAME}/adump'"
 local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT=${PORT}))'"
 
-# Remove all matching parameters in one go and create a temp file
-awk 'tolower($0) !~ /(db_unique_name|audit_file_dest|log_archive_dest_1|control_files|log_file_name_convert|db_file_name_convert|db_create_file_dest)/' "$PFILE" > "$TMP_FILE"
 
-# Append updated parameters at the end
-cat <<EOF >> "$TMP_FILE"
-*.db_unique_name = ${oracle_db_unique_name}
+# Handling backup condition
+if [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "yes" ]]; then
+
+  # Take a backup before modifying
+  cp ${ORACLE_HOME}/dbs/standby.pfile "$PFILE"
+  TMP_FILE="${PFILE}.tmp"
+
+  # Remove all matching parameters in one go and create a temp file
+  awk 'tolower($0) !~ /(db_unique_name|audit_file_dest|log_archive_dest_1|control_files|log_file_name_convert|db_file_name_convert|db_create_file_dest)/' "$PFILE" > "$TMP_FILE"
+
+  # Append updated parameters at the end
+  cat <<EOF >> "$TMP_FILE"
+*.db_unique_name = ${STANDBY_UNIQUE_NAME}
 *.audit_file_dest = ${audit_file_dest}
 *.log_archive_dest_1 = ${log_archive_dest_1}
 *.control_files = ${control_files}
@@ -78,14 +93,42 @@ cat <<EOF >> "$TMP_FILE"
 *.LOCAL_LISTENER= ${local_listener}
 EOF
 
-# Replace the original file
-mv "$TMP_FILE" "$PFILE"
-chown {{ db_oracle_user }}:{{ db_oinstall_group }} {{ databases.standby.oracle_db_home }}/dbs/init{{ databases.standby.oracle_db_sid }}.ora
-chmod 755 {{ databases.standby.oracle_db_home }}/dbs/init{{ databases.standby.oracle_db_sid }}.ora
+  # Replace the original file
+  mv "$TMP_FILE" "$PFILE"
+  chown {{ db_oracle_user }}:{{ db_oinstall_group }} "$PFILE"
+  chmod 755 "$PFILE"
 
-# Verify changes
-echo "Updated standby.pfile:"
-cat {{ databases.standby.oracle_db_home }}/dbs/init{{ databases.standby.oracle_db_sid }}.ora
+  # Verify changes
+  echo "Updated standby.pfile:"
+  cat "$PFILE"
+
+elif [[ "$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')" == "no" ]]; then
+
+# Insert a static entry for standby in the listener.ora file if not updated before
+    if ! grep -q "${STANDBY_UNIQUE_NAME}" "$listener_file"; then
+        cp "$listener_file" "${listener_file}.bak"
+        echo "Updating listener.ora..."
+        cat <<EOF >> "$listener_file"
+SID_LIST_LISTENER =
+(SID_LIST =
+(SID_DESC =
+ (GLOBAL_DBNAME = ${STANDBY_UNIQUE_NAME})
+ (ORACLE_HOME = ${ORACLE_HOME})
+ (SID_NAME = ${ORACLE_SID})
+)
+)
+EOF
+    fi
+  
+    # Create an initialization parameter with only DB_NAME
+  echo "DB_NAME=${PRIMARY_DB_NAME}" > "$PFILE"
+  chown {{ db_oracle_user }}:{{ db_oinstall_group }} "$PFILE"
+  chmod 755 "$PFILE"
+
+else
+    echo "ERROR: Invalid value for 'with_backup'. Please provide 'yes' or 'no'." | tee -a "$FAILURE_LOG"
+    exit 1
+fi
 
 #  Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then

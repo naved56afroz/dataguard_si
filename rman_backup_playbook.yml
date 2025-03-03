@@ -19,17 +19,5 @@
     - vars/vault.yml
 
   roles:
-    - role: dataguard_precheck
-      tags: dataguard_precheck
-
-    - role: preconfig_primary
-      tags: preconfig_primary
-
-    - role: preconfig_standby
-      tags: preconfig_standby
-
-    - role: create_standby  
-      tags: create_standby
-
-    - role: sync_gap
-      tags: sync_gap
+    - role: backup_primary_db
+      tags: backup_primary_db
