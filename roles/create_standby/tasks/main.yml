@@ -65,6 +65,36 @@
       - inventory_hostname == standby_host and hostvars[primary_host].standby_dbid is defined
       - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
+- name: Copy DISKGROUP script from primary database
+  ansible.builtin.template:
+    src: diskgroup.sh
+    dest: "{{ scripts_dir }}/diskgroup.sh"
+    mode: '0755'
+  when: 
+      - inventory_hostname == primary_host 
+      
+- name: Fetch DISKGROUP from primary database
+  ansible.builtin.shell: "{{ scripts_dir }}/diskgroup.sh"
+  register: diskgroup_result
+  changed_when: false
+  when: 
+      - inventory_hostname == primary_host 
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists      
+     
+- name: Set DISKGROUP as fact on primary database
+  ansible.builtin.set_fact:
+    standby_diskgroup: "{{ diskgroup_result.stdout | trim }}"
+  when: 
+      - inventory_hostname == primary_host  
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists
+
+- name: Fetch DISKGROUP fact from primary to standby
+  ansible.builtin.set_fact:
+    standby_diskgroup: "{{ hostvars[primary_host].standby_diskgroup }}"
+  when: 
+      - inventory_hostname == standby_host and hostvars[primary_host].standby_diskgroup is defined
+      - restoredone.stat.exists is not defined or not restoredone.stat.exists
+
 - name: Copy RMAN restore script for standby
   ansible.builtin.template:
     src: restore_standby_db.sh.j2
@@ -73,6 +103,7 @@
   vars:
     database_name: "standby"
     dbid: "{{ standby_dbid }}"
+    primary_diskgroup: "{{ standby_diskgroup }}"
   when: 
       - inventory_hostname == standby_host 
       - not restoredone.stat.exists
