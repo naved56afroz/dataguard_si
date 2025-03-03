@@ -118,7 +118,7 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
  db_recovery_file_dest="{{ databases.standby.db_recovery_file_dest }}"
  db_recovery_file_dest_size="{{ databases.standby.db_recovery_file_dest_size }}"
  
- su - {{ db_oracle_user }} -c "rman target sys/{{ default_dbpass }}@{{ databases.primary.oracle_db_sid }} auxiliary sys/{{ default_dbpass }}@${ORACLE_SID}" <<EOF | tee "$MASTER_LOG"
+ su - {{ db_oracle_user }} -c "rman target sys/{{ default_dbpass }}@{{ databases.primary.oracle_db_sid }} auxiliary sys/{{ default_dbpass }}@${STANDBY_UNIQUE_NAME}" <<EOF | tee "$MASTER_LOG"
  RUN {
       ALLOCATE CHANNEL prmy1 TYPE DISK;
       ALLOCATE CHANNEL prmy2 TYPE DISK;
