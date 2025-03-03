@@ -20,25 +20,20 @@ WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:
 # Check if RMAN Restore was successful
 if [[ "$WITH_BACKUP" == "true" ]]; then 
   if ! grep -q "Finished recover at" "$RESTORE_LOG_FILE"; then
-      echo "RMAN Recover failed or incomplete. Exiting..." | tee -a "$FAILURE_LOG"
+      echo "ERROR: RMAN Recover failed or incomplete. Exiting..." | tee -a "$FAILURE_LOG"
       exit 1
   fi
   
   # Extract Controlfile Location from RMAN Logs
   CONTROLFILE_PATH=$(grep "output file name=" "$RESTORE_LOG_FILE" | awk -F '=' '{print $2}' | tr -d ' ')
   if [[ -z "$CONTROLFILE_PATH" ]]; then
-      echo "Error: Controlfile location not found in RMAN logs." | tee -a "$FAILURE_LOG"
+      echo "ERROR: Controlfile location not found in RMAN logs." | tee -a "$FAILURE_LOG"
       exit 1
   fi
   
   # Update PFILE with new Controlfile Location
-  # Remove all matching parameters in one go and create a temp file
   awk 'tolower($0) !~ /(control_files)/' "$PFILE" > "$TMP_FILE"
-  
-  # Append updated parameters at the end
-  cat <<EOF >> "$TMP_FILE"
-  *.control_files = ${CONTROLFILE_PATH}
-  EOF
+  echo "*.control_files = '$CONTROLFILE_PATH'" >> "$TMP_FILE"
   
   # Replace the original file
   mv "$TMP_FILE" "$PFILE"
@@ -53,10 +48,8 @@ if [[ "$WITH_BACKUP" == "true" ]]; then
 SQL
 
 elif [[ "$WITH_BACKUP" == "false" ]]; then
-
   # Check if media recovery is active
-  
-  STATUS=$(su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee "$MASTER_LOG"
+  STATUS=$(su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
   SET HEADING OFF FEEDBACK OFF VERIFY OFF ECHO OFF
   SELECT COUNT(*) FROM V\$MANAGED_STANDBY WHERE PROCESS = 'MRP0';
   EXIT;
@@ -67,16 +60,16 @@ SQL
   STATUS=$(echo "$STATUS" | grep -Eo '^[0-9]+$')
   
   if [[ "$STATUS" -gt 0 ]]; then
-      echo "Media recovery is already active. No action needed."
+      echo "Media recovery is already active. No action needed." | tee -a "$MASTER_LOG"
       touch "{{ done_dir }}/dataguard.success"
       exit 0
   else
-      echo "Starting media recovery..."
+      echo "Starting media recovery..." | tee -a "$MASTER_LOG"
       su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
       ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
       EXIT;
 SQL
-  touch "{{ done_dir }}/dataguard.success"
+      touch "{{ done_dir }}/dataguard.success"
   fi
 
 else
@@ -84,14 +77,13 @@ else
   exit 1
 fi
 
-#Check for failures and exit accordingly
+# Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"
     exit 1
 fi
 
-echo "Dataguard recovery process started successfully"
-rm -f "$FAILURE_LOG"
+echo "Dataguard recovery process started successfully" | tee -a "$MASTER_LOG"
 touch "{{ done_dir }}/dataguard.success"
 exit 0
