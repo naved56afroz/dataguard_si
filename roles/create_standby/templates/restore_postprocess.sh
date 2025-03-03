@@ -51,6 +51,7 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
   # Check if media recovery is active
   STATUS=$(su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
   SET HEADING OFF FEEDBACK OFF VERIFY OFF ECHO OFF
+  ALTER SYSTEM SET standby_file_management='AUTO' scope=both sid='*';
   SELECT COUNT(*) FROM V\$MANAGED_STANDBY WHERE PROCESS = 'MRP0';
   EXIT;
 SQL
