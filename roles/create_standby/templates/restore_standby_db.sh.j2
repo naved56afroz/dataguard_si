@@ -51,7 +51,7 @@ SQL
 
 # Convert 'with_backup' variable to lowercase for consistency
 WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
-if [[ "$WITH_BACKUP" == "yes" ]]; then
+if [[ "$WITH_BACKUP" == "true" ]]; then
 
  {% set backup_format = backup_location ~ '/%U' %}
  {% set ctrl_backup_format = backup_location ~ '/controlfile_%d_%T_%s_%p.bkp' %}
@@ -99,7 +99,7 @@ if [[ "$WITH_BACKUP" == "yes" ]]; then
  EXIT;
 EOF
 
-elif [[ "$WITH_BACKUP" == "no" ]]; then
+elif [[ "$WITH_BACKUP" == "false" ]]; then
 
  # Define values dynamically
  ORACLE_HOME={{ databases.standby.oracle_db_home }}
@@ -145,7 +145,7 @@ EXIT;
 EOF
 
 else
-    echo "ERROR: Invalid value for 'with_backup'. Please provide 'yes' or 'no'." | tee -a "$FAILURE_LOG"
+    echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
     exit 1
 fi
 

@@ -18,7 +18,7 @@ TMP_FILE="${PFILE}.tmp"
 WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
 
 # Check if RMAN Restore was successful
-if [[ "$WITH_BACKUP" == "yes" ]]; then 
+if [[ "$WITH_BACKUP" == "true" ]]; then 
   if ! grep -q "Finished recover at" "$RESTORE_LOG_FILE"; then
       echo "RMAN Recover failed or incomplete. Exiting..." | tee -a "$FAILURE_LOG"
       exit 1
@@ -52,7 +52,7 @@ if [[ "$WITH_BACKUP" == "yes" ]]; then
   EXIT;
 SQL
 
-elif [[ "$WITH_BACKUP" == "no" ]]; then
+elif [[ "$WITH_BACKUP" == "false" ]]; then
 
   # Check if media recovery is active
   
@@ -80,7 +80,7 @@ SQL
   fi
 
 else
-  echo "ERROR: Invalid value for 'with_backup'. Please provide 'yes' or 'no'." | tee -a "$FAILURE_LOG"
+  echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
   exit 1
 fi
 

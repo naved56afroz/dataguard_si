@@ -9,8 +9,8 @@
 
 ## Section A - Common Variables
 # config_type - to specify rac or single instance values rac and si
-# with_backup - yes for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
-#             - no for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
+# with_backup - true for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
+#             - false for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
 
 # Provide the ansible work directory on target system
 work_dir:   &work_dir "/tmp/ansible"
@@ -23,7 +23,7 @@ standby_host: standby-db
 db_oracle_user: oracle
 grid_user: grid
 db_oinstall_group: oinstall
-with_backup: yes
+with_backup: true
 backup_location: /u01/backup  
 
 databases:  
