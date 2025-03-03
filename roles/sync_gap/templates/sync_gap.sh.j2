@@ -88,7 +88,7 @@ SQL
                     exit 1
                 fi
             # Wait for standby to catch up
-            echo "Waiting for 180 seconds to allow standby to sync..."
+            echo "Waiting for 180 seconds to allow standby to sync..." 
             sleep 180
             # Capture latest sequence number on standby
             su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
