@@ -69,6 +69,7 @@ local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT=${PORT}))
 
 # Convert 'with_backup' variable to lowercase for consistency
 WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+
 if [[ "$WITH_BACKUP" == "true" ]]; then 
 
   # Take a backup before modifying
@@ -122,7 +123,8 @@ SID_LIST_LISTENER =
 
 EOF
     fi
-  
+ 
+    $ORACLE_HOME/bin/lsnrctl reload
     # Create an initialization parameter with only DB_NAME
   echo "DB_NAME=${PRIMARY_DB_NAME}" > "$PFILE"
   chown {{ db_oracle_user }}:{{ db_oinstall_group }} "$PFILE"
