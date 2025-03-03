@@ -109,14 +109,17 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
         cp "$listener_file" "${listener_file}.bak"
         echo "Updating listener.ora..."
         cat <<EOF >> "$listener_file"
+
+
 SID_LIST_LISTENER =
-(SID_LIST =
-(SID_DESC =
- (GLOBAL_DBNAME = ${STANDBY_UNIQUE_NAME})
- (ORACLE_HOME = ${ORACLE_HOME})
- (SID_NAME = ${ORACLE_SID})
-)
-)
+  (SID_LIST =
+    (SID_DESC =
+     (GLOBAL_DBNAME = ${STANDBY_UNIQUE_NAME})
+     (ORACLE_HOME = ${ORACLE_HOME})
+     (SID_NAME = ${ORACLE_SID})
+    )
+   )
+
 EOF
     fi
   
