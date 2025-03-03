@@ -159,14 +159,17 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
  }
 EXIT;
 EOF
-
-        # Check if the RMAN command was successful and ensure there are no RMAN- errors in the log
-        if ! grep -q "RMAN-" "$MASTER_LOG"; then
-            echo "Duplicate Target Dataguard setup completed successfully." | tee -a $MASTER_LOG
-            touch "{{ done_dir }}/standby_restore.success"
-        else
+        # Capture RMAN exit status
+        rman_exit_code=$?
+        echo "RMAN exit code: $rman_exit_code" | tee -a "$MASTER_LOG"
+        grep "RMAN-" "$MASTER_LOG" >> "$FAILURE_LOG"
+        # Check if the RMAN command log contains any RMAN- errors
+        if grep -q "RMAN-" "$MASTER_LOG"; then
             echo "Duplicate Target Dataguard setup failed! Check logs for details: $MASTER_LOG" | tee -a "$FAILURE_LOG"
             exit 1
+        else
+            echo "Duplicate Target Dataguard setup completed successfully." | tee -a "$MASTER_LOG"
+            touch "{{ done_dir }}/standby_restore.success"
         fi
 
 else
