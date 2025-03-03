@@ -115,10 +115,6 @@ EOF
         exit 1
     fi
 
-    else
-        echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
-        exit 1
-
 elif [[ "$WITH_BACKUP" == "false" ]]; then
 
  # Define values dynamically
@@ -173,9 +169,11 @@ EOF
             exit 1
         fi
 
-        else
-            echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
-            exit 1
+else
+    echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
+    exit 1
+
+
 fi
 
 #Check for failures and exit accordingly
