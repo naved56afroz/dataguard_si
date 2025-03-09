@@ -194,7 +194,7 @@
         - inventory_hostname == standby_host 
         - not drprecheckdone.stat.exists
 
-- name: Execute Dataguard Pre-check script on primary
+- name: Execute Dataguard Pre-check script on standby
   ansible.builtin.shell: "{{ scripts_dir }}/standby_precheck.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
