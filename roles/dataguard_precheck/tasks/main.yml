@@ -132,7 +132,7 @@
 
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
-    src: dataguard_precheck.sh.j2
+    src: primary_precheck.sh.j2
     dest: "{{ scripts_dir }}/primary_precheck.sh"
     mode: '0755'
   vars:
@@ -142,7 +142,7 @@
         - not drprecheckdone.stat.exists
 
 - name: Execute Dataguard Pre-check script on primary
-  ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
+  ansible.builtin.shell: "{{ scripts_dir }}/primary_precheck.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
@@ -184,7 +184,7 @@
 
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
-    src: dataguard_precheck.sh.j2
+    src: standby_precheck.sh.j2
     dest: "{{ scripts_dir }}/standby_precheck.sh"
     mode: '0755'
   vars:
@@ -195,7 +195,7 @@
         - not drprecheckdone.stat.exists
 
 - name: Execute Dataguard Pre-check script on primary
-  ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
+  ansible.builtin.shell: "{{ scripts_dir }}/standby_precheck.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
