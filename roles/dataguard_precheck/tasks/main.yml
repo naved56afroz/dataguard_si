@@ -91,7 +91,7 @@
 # Precheck : check Oracle DB home patch set
 
 - name: Get applied patches from Oracle DB home
-  ansible.builtin.shell: "{{ databases.primary.db_home }}/OPatch/opatch lspatches | grep -v 'OPatch succeeded'"
+  ansible.builtin.shell: "{{ databases.primary.oracle_db_home }}/OPatch/opatch lspatches | grep -v 'OPatch succeeded'"
   register: patch_info
   become: yes
   become_method: su
