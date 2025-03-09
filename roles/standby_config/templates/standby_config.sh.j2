@@ -2,7 +2,7 @@
 
 # Define values dynamically
 ORACLE_HOME="{{ databases[database_name].oracle_db_home }}"
-GRID_HOME="{{ grid_db_home }}"
+GRID_HOME="{{ databases[database_name].grid_db_home }}"
 ORACLE_SID="{{ databases[database_name].db_sid }}"
 PFILE=${ORACLE_HOME}/dbs/init${ORACLE_SID}.ora
 oracle_db_base="{{ databases[database_name].oracle_db_base }}"
