@@ -92,12 +92,6 @@
       - inventory_hostname == standby_host 
       - standbyconfigdone is defined and not standbyconfigdone.stat.exists
 
-- name: Checking if Standby configuration was already done
-  ansible.builtin.stat:
-    path: "{{ done_dir }}/standby_config.success"
-  register: standbyconfigdone
-  when: inventory_hostname == standby_host
-
 - name: Check connectivity to primary database from standby site
   ansible.builtin.shell: "su {{ db_oracle_user }} -c 'tnsping {{ databases.primary.db_unique_name }}'"
   register: tnsping_primaryresult
@@ -105,7 +99,6 @@
   failed_when: false
   when: 
       - inventory_hostname == standby_host 
-      - standbyconfigdone is defined and standbyconfigdone.stat.exists
 
 - name: Check connectivity to standby database from primary site
   ansible.builtin.shell: "su {{ db_oracle_user }} -c 'tnsping {{ databases.standby.db_unique_name }}'"
@@ -114,14 +107,12 @@
   failed_when: false
   when: 
       - inventory_hostname == primary_host 
-      - standbyconfigdone is defined and standbyconfigdone.stat.exists
 
 - name: Validate primary database connectivity from standby site
   ansible.builtin.fail:
     msg: "Error: Remote primary database cannot be reached using TNS alias. Check listener status and tnsnames configuration."
   when: 
       - inventory_hostname == standby_host 
-      - standbyconfigdone is defined and standbyconfigdone.stat.exists
       - tnsping_primaryresult is not defined or 'OK' not in tnsping_primaryresult.stdout
 
 - name: Validate standby database connectivity from primary site
@@ -129,7 +120,6 @@
     msg: "Error: Standby database cannot be reached using TNS alias. Check listener status and tnsnames configuration."
   when: 
       - inventory_hostname == primary_host 
-      - standbyconfigdone is defined and standbyconfigdone.stat.exists
       - tnsping_standbyresult is not defined or 'OK' not in tnsping_standbyresult.stdout
 
 - name: Confirm successful TNS connections
@@ -137,7 +127,6 @@
     msg: "All good for TNS connections!"
   when: 
       - inventory_hostname == standby_host 
-      - standbyconfigdone is defined and standbyconfigdone.stat.exists
       - tnsping_primaryresult is defined and 'OK' in tnsping_primaryresult.stdout
       - tnsping_standbyresult is defined and 'OK' in tnsping_standbyresult.stdout
 
