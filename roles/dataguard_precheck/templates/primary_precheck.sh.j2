@@ -50,6 +50,9 @@ REDO_SIZES=$(grep "REDO_SIZES:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 UNIQUE_SIZES=$(echo "$REDO_SIZES" | tr ',' '\n' | sort -u | wc -l)
 MULTIPLEX_COUNT=$(grep "MULTIPLEX_CHECK:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 
+# Ensure MULTIPLEX_COUNT has a valid default value if empty
+MULTIPLEX_COUNT=${MULTIPLEX_COUNT:-2}  # Default to 2 if empty
+
 # 1. Validate ARCHIVELOG mode
 if [[ "$ARCHIVELOG_MODE" != "ARCHIVELOG" ]]; then
     echo "ERROR: Database is NOT in ARCHIVELOG mode!" | tee -a "$FAILURE_LOG"
