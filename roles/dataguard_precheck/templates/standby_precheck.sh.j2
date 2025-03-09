@@ -71,17 +71,12 @@ SQL
     fi
 
     echo "Available space in $dg: ${available_space}G" | tee -a "$MASTER_LOG"
+    echo "Required space: ${db_size}G" | tee -a "$MASTER_LOG"
 
-    # Convert required sizes to numeric values for comparison
-    required_size=$(echo $db_size | sed 's/G//')
-    available_size=$(echo $available_space | sed 's/G//')
-
-    echo "Required space: ${required_size}G" | tee -a "$MASTER_LOG"
-
-    if [ "$available_size" -ge "$required_size" ]; then
+    if [ "$available_space" -ge "$db_size" ]; then
         echo "Sufficient space available in $dg." | tee -a "$MASTER_LOG"
     else
-        echo "Error: Not enough space available in $dg. Required: ${required_size}G, Available: ${available_size}G" | tee -a "$FAILURE_LOG"
+        echo "Error: Not enough space available in $dg. Required: ${db_size}G, Available: ${available_size}G" | tee -a "$FAILURE_LOG"
         exit 1
     fi
 }
