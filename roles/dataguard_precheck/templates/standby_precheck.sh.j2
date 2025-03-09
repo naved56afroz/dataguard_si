@@ -1,0 +1,99 @@
+#!/bin/bash
+
+export ORACLE_SID=$(ps -ef | grep pmon | grep ASM | awk '{match($NF, /\+ASM[0-9]*/); print substr($NF, RSTART, RLENGTH)}')
+export ORACLE_HOME=$(awk -F: -v sid="$ORACLE_SID" '$1 == sid {print $2}' /etc/oratab)
+export PATH=$PATH:$ORACLE_HOME/bin
+MASTER_LOG="{{ done_dir }}/dataguard_precheck.log"
+FAILURE_LOG="{{ done_dir }}/failure_check.log"
+
+# Ensure log files are empty before running
+> "$MASTER_LOG"
+> "$FAILURE_LOG"
+
+# Input variables
+file_dest="{{ databases[database_name].file_dest }}"
+online_log_dest1="{{ databases[database_name].online_log_dest1 }}"
+db_recovery_file_dest="{{ databases[database_name].db_recovery_file_dest }}"
+db_recovery_file_dest_size="{{ databases[database_name].db_recovery_file_dest_size }}"  # Required size
+db_size="{{ db_size }}"  # Required database size
+
+check_diskgroup() {
+    local dg=$1
+    echo "Checking Disk Group or Filesystem: $dg" | tee -a "$MASTER_LOG"
+    
+    # Check if destination is ASM or JFS2
+    if [[ "$dg" == +* ]]; then
+        # ASM Disk Group Validation
+        exist_check=$(su - {{ grid_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT COUNT(*) FROM v\$asm_diskgroup WHERE name=UPPER('${dg#+}');
+EXIT;
+SQL
+)
+        
+        exist_check=$(echo "$exist_check" | tr -d '[:space:]')
+        
+        if [[ "$exist_check" -eq 0 ]]; then
+            echo "Error: Disk group $dg does not exist." | tee -a "$FAILURE_LOG"
+            exit 1
+        fi
+
+        echo "Disk group $dg exists. Checking available space..." | tee -a "$MASTER_LOG"
+        
+        # Check available space
+        available_space=$(su - {{ grid_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SELECT ROUND(USABLE_FILE_MB / 1024, 2) FROM v\$asm_diskgroup WHERE name=UPPER('${dg#+}');
+EXIT;
+SQL
+)
+        
+        available_space=$(echo "$available_space" | tr -d '[:space:]')
+        echo "Available space in $dg: ${available_space}G" | tee -a "$MASTER_LOG"
+    else
+        # JFS2 File System Validation
+        if ! df -g "$dg" &>/dev/null; then
+            echo "Error: Filesystem $dg does not exist." | tee -a "$FAILURE_LOG"
+            exit 1
+        fi
+
+        available_space=$(df -g "$dg" | awk 'NR==2 {print $3}')
+        echo "Available space in $dg: ${available_space}G" | tee -a "$MASTER_LOG"
+    fi
+
+    # Convert required sizes to numeric values for comparison
+    required_size=$(echo $db_size | sed 's/G//')
+    available_size=$(echo $available_space | sed 's/G//')
+
+    echo "Required space: ${required_size}G" | tee -a "$MASTER_LOG"
+
+    if (( $(echo "$available_size >= $required_size" | bc -l) )); then
+        echo "Sufficient space available in $dg." | tee -a "$MASTER_LOG"
+    else
+        echo "Error: Not enough space available in $dg. Required: ${required_size}G, Available: ${available_size}G" | tee -a "$FAILURE_LOG"
+        exit 1
+    fi
+}
+
+# Validate each disk group or file system
+check_diskgroup "$file_dest"
+check_diskgroup "$online_log_dest1"
+check_diskgroup "$db_recovery_file_dest"
+
+echo "All disk groups or filesystems are valid. Proceeding with database creation." | tee -a "$MASTER_LOG"
+
+# Check for failures and exit accordingly
+if [[ -s "$FAILURE_LOG" ]]; then
+    cat "$FAILURE_LOG"
+    rm -f "$FAILURE_LOG"
+    exit 1
+fi
+
+echo "All pre-checks passed for standby database successfully!" | tee -a "$MASTER_LOG"
+rm -f "$FAILURE_LOG"
+touch "{{ done_dir }}/drprecheck.success"
+exit 0
