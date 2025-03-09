@@ -133,7 +133,7 @@
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
     src: dataguard_precheck.sh.j2
-    dest: "{{ scripts_dir }}/dataguard_precheck.sh"
+    dest: "{{ scripts_dir }}/primary_precheck.sh"
     mode: '0755'
   vars:
     database_name: "primary"
@@ -185,7 +185,7 @@
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
     src: dataguard_precheck.sh.j2
-    dest: "{{ scripts_dir }}/dataguard_precheck.sh"
+    dest: "{{ scripts_dir }}/standby_precheck.sh"
     mode: '0755'
   vars:
     database_name: "standby"
@@ -236,7 +236,7 @@
 - name: Show warning if system configurations do not match
   ansible.builtin.debug:
     msg: >
-      ⚠️ WARNING: System configuration mismatch detected between primary and standby!
+      WARNING: System configuration mismatch detected between primary and standby!
       Primary: CPU Cores={{ hostvars[primary_host].cpu_cores }}, Sockets={{ hostvars[primary_host].cpu_sockets }}, Memory={{ hostvars[primary_host].total_memory }} GB
       Standby: CPU Cores={{ cpu_cores }}, Sockets={{ cpu_sockets }}, Memory={{ total_memory }} GB
   when:
