@@ -3,6 +3,8 @@
 export ORACLE_SID={{ databases[database_name].db_sid }}
 export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
 export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
+diskgroup={{ databases[database_name].file_dest }}
+diskgroup=${diskgroup#+}
 
 MASTER_LOG="{{ done_dir }}/dataguard_precheck.log"
 FAILURE_LOG="{{ done_dir }}/failure_check.log"
@@ -25,7 +27,7 @@ SELECT 'ARCHIVELOG_MODE:' || log_mode FROM v\$database;
 SELECT 'DATABASE_SIZE:' || ROUND(SUM(bytes) * 1.025 / 1024 / 1024 / 1024, 2) FROM dba_segments;
 
 -- Precheck 2: Fetch ASM disk group if applicable
-SELECT 'DISK_COUNT:' || COUNT(*) FROM v\$asm_diskgroup WHERE STATE='CONNECTED' AND NAME='{{ databases[database_name].file_dest }}';
+SELECT 'DISK_COUNT:' || COUNT(*) FROM v\$asm_diskgroup WHERE STATE='CONNECTED' AND NAME='${diskgroup}';
 
 -- Precheck 3: Redo log sizes
 SELECT 'REDO_SIZES:' || LISTAGG(bytes, ',') WITHIN GROUP (ORDER BY group#) FROM v\$log;
