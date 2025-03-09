@@ -73,7 +73,10 @@ SQL
     echo "Available space in $dg: ${available_space}G" | tee -a "$MASTER_LOG"
     echo "Required space: ${db_size}G" | tee -a "$MASTER_LOG"
 
-    if (( $(echo "$available_space >= $db_size" | bc -l) )); then
+    available_space_int=$(echo "$available_space" | awk -F. '{print $1}')
+    db_size_int=$(echo "$db_size" | awk -F. '{print $1}')
+
+    if [ "$available_space_int" -ge "$db_size_int" ]; then
         echo "Sufficient space available in $dg." | tee -a "$MASTER_LOG"
     else
         echo "Error: Not enough space available in $dg. Required: ${db_size}G, Available: ${available_size}G" | tee -a "$FAILURE_LOG"
