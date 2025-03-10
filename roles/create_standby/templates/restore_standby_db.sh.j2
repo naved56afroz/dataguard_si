@@ -3,6 +3,7 @@
 export ORACLE_SID={{ databases[database_name].db_sid }}
 export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
 export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
+RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
 MASTER_LOG="{{ done_dir }}/standby_rman_restore.log"
 FAILURE_LOG="{{ done_dir }}/standby_rman_restore_fail.log"
 
@@ -48,9 +49,6 @@ if [[ "$WITH_BACKUP" == "true" ]]; then
  # Determine the number of CPU cores
 standby_cpu_core=$(lsdev -Cc processor | wc -l)
 primary_cpu_core={{ primary_cpu_core }}
-
-# Generate the RMAN script dynamically
-RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
 
 {
     echo "RUN {"
