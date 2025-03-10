@@ -85,12 +85,7 @@
   when: 
       - inventory_hostname == primary_host
       - primary_output.rc != 0
-
-- name: End the play if Data Guard is not in sync
-  ansible.builtin.meta: end_play
-  when: 
-      - inventory_hostname == primary_host
-      - primary_output.rc != 0
+  run_once: true
 
 - name: Extract Primary Sequence Number
   ansible.builtin.set_fact:
