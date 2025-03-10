@@ -20,6 +20,7 @@ if ps -ef | grep "pmon" | grep -q "$ORACLE_SID"; then
     su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
     shut immediate;
     startup nomount;
+SQL
 else
     echo "Starting standby database..." | tee -a "$MASTER_LOG"
     su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
