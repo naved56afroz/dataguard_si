@@ -87,7 +87,7 @@ RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
     echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c rman target / cmdfile={{ scripts_dir }}/rman_restore.rcv log=$MASTER_LOG
+su - {{ db_oracle_user }} -c rman target / cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
 
 # Capture RMAN exit status
 rman_exit_code=$?
@@ -141,7 +141,7 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
       echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} cmdfile={{ scripts_dir }}/rman_restore.rcv log=$MASTER_LOG
+su - {{ db_oracle_user }} -c rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
 
 # Capture RMAN exit status
 rman_exit_code=$?
