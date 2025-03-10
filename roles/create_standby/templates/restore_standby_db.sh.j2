@@ -62,14 +62,14 @@ RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
         i=`expr $i + 1`
     done
 
-    echo "    set dbid 1719927505;"
+    echo "    set dbid {{ dbid }};"
     echo ""
     echo "    # Identify the latest control file backup dynamically"
     echo "    restore standby controlfile from '$LATEST_CONTROLFILE';"
     echo "    sql \"alter database mount standby database\";"
     echo ""
     echo "    # Catalog the backup pieces if needed"
-    echo "    catalog start with '/u01/backup/' noprompt;"
+    echo "    catalog start with '{{ backup_location }}/' noprompt;"
     echo ""
     echo "    restore database;"
     echo "    switch datafile all;"
