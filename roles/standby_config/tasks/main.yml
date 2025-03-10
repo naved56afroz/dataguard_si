@@ -100,6 +100,13 @@
   when: 
       - inventory_hostname == standby_host 
 
+- name: Debug tnsping Output for primary database
+  ansible.builtin.debug:
+    msg: "{{ tnsping_primaryresult }}"
+  when: 
+      - inventory_hostname == standby_host
+      - tnsping_primaryresult is not defined or 'OK' not in tnsping_primaryresult.stdout
+
 - name: Check connectivity to standby database from primary site
   ansible.builtin.shell: "su {{ db_oracle_user }} -c 'tnsping {{ databases.standby.db_unique_name }}'"
   register: tnsping_standbyresult
@@ -107,6 +114,13 @@
   failed_when: false
   when: 
       - inventory_hostname == primary_host 
+
+- name: Debug tnsping Output for standby database
+  ansible.builtin.debug:
+    msg: "{{ tnsping_standbyresult }}"
+  when: 
+      - inventory_hostname == primary_host
+      - tnsping_standbyresult is not defined or 'OK' not in tnsping_standbyresult.stdout
 
 - name: Validate primary database connectivity from standby site
   ansible.builtin.fail:
@@ -122,11 +136,16 @@
       - inventory_hostname == primary_host 
       - tnsping_standbyresult is not defined or 'OK' not in tnsping_standbyresult.stdout
 
-- name: Confirm successful TNS connections
+- name: Confirm successful TNS connections from standby site
   ansible.builtin.debug:
-    msg: "All good for TNS connections!"
+    msg: "All good for TNS connections from standby!"
   when: 
       - inventory_hostname == standby_host 
       - tnsping_primaryresult is defined and 'OK' in tnsping_primaryresult.stdout
-      - tnsping_standbyresult is defined and 'OK' in tnsping_standbyresult.stdout
 
+- name: Confirm successful TNS connections from primary site
+  ansible.builtin.debug:
+    msg: "All good for TNS connections from primary!"
+  when: 
+      - inventory_hostname == primary_host 
+      - tnsping_standbyresult is defined and 'OK' in tnsping_standbyresult.stdout
