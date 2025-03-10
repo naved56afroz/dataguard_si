@@ -91,7 +91,15 @@ else
     exit 1
 fi
 
-if su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl status" | grep -q 'Instance "${ORACLE_SID}", status UNKNOWN'; then
+su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl status" >> "$MASTER_LOG"
+if [ $? -eq 0 ]; then
+    echo "Listener is running successfully" | tee -a "$MASTER_LOG"
+else
+    echo "Listener status check failed" | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
+if grep -q "Instance \"${ORACLE_SID}\", status UNKNOWN" "$MASTER_LOG"; then
     echo "Instance '${ORACLE_SID}' is in UNKNOWN state!"
 else
     echo "Instance '${ORACLE_SID}' is not in UNKNOWN state."
