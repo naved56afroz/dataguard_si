@@ -21,7 +21,7 @@ log_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_
 db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
 audit_file_dest="'${oracle_db_base}/admin/${STANDBY_UNIQUE_NAME}/adump'"
 local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT={{ databases[database_name].port }}))'"
-listener_file=${GRID_HOME}/network/admin
+listener_file=${GRID_HOME}/network/admin/listener.ora
 
 # Convert 'with_backup' variable to lowercase for consistency
 WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
@@ -81,7 +81,7 @@ SID_LIST_LISTENER =
 EOL
     fi
  
-    su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl reload" | tee -a "$MASTER_LOG"
+    su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl reload"  >> "$MASTER_LOG"
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
     echo "Listener reload successful" | tee -a "$MASTER_LOG"
 else
@@ -89,13 +89,14 @@ else
     exit 1
 fi
 
-su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl status" | tee -a "$MASTER_LOG"
+su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl status" >> "$MASTER_LOG"
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
     echo "Listener is running successfully" | tee -a "$MASTER_LOG"
 else
     echo "Listener status check failed" | tee -a "$FAILURE_LOG"
     exit 1
 fi
+
 
 
     # Create an initialization parameter with only DB_NAME
