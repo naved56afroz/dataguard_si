@@ -50,7 +50,7 @@ standby_cpu_core=$(lsdev -Cc processor | wc -l)
 primary_cpu_core={{ primary_cpu_core }}
 
 # Generate the RMAN script dynamically
-RMAN_SCRIPT="/tmp/ansible/scripts/rman_restore.rcv"
+RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
 
 {
     echo "RUN {"
@@ -87,7 +87,7 @@ RMAN_SCRIPT="/tmp/ansible/scripts/rman_restore.rcv"
     echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c "rman target / log=$MASTER_LOG @/tmp/ansible/scripts/rman_restore.rcv"
+su - {{ db_oracle_user }} -c "rman target / log=$MASTER_LOG @{{ scripts_dir }}/rman_restore.rcv"
 
 # Capture RMAN exit status
 rman_exit_code=$?
@@ -141,7 +141,7 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
       echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c "rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} log=$MASTER_LOG @/tmp/ansible/scripts/rman_duplicate.rcv"
+su - {{ db_oracle_user }} -c "rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} log=$MASTER_LOG @{{ scripts_dir }}/rman_duplicate.rcv"
 
 # Capture RMAN exit status
 rman_exit_code=$?
