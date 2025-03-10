@@ -96,8 +96,6 @@ rman_exit_code=$?
 elif [[ "$WITH_BACKUP" == "false" ]]; then
 
  # Define values dynamically
- ORACLE_HOME={{ databases[database_name].oracle_db_home }}
- ORACLE_SID={{ databases[database_name].db_sid }}
  primary_unique_name="{{ databases.primary.db_unique_name }}"
  primary_db_name="{{ databases.primary.db_name }}"
  standby_unique_name="{{ databases[database_name].db_unique_name }}"
@@ -124,8 +122,8 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
       echo "   set db_name='${primary_unique_name}'"
       echo "   set db_create_file_dest='${db_create_file_dest}'"
       echo "   set db_unique_name='${standby_unique_name}'"
-      echo "   set db_file_name_convert='${db_file_name_convert}'"
-      echo "   set log_file_name_convert='${log_file_name_convert}'"
+      echo "   set db_file_name_convert=${db_file_name_convert}"
+      echo "   set log_file_name_convert=${log_file_name_convert}"
       echo "   set control_files='${db_create_file_dest}/${standby_unique_name}/CONTROLFILE/${standby_unique_name}_control01.ctl'"
       echo "   set log_archive_max_processes='5'"
       echo "   set fal_client='${standby_unique_name}'"
