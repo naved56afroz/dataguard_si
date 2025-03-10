@@ -93,12 +93,16 @@
       - standbyconfigdone is defined and not standbyconfigdone.stat.exists
 
 - name: Check connectivity to primary database from standby site
-  ansible.builtin.shell: "su {{ db_oracle_user }} -c '{{ databases.standby.oracle_db_home }}/bin/tnsping {{ databases.primary.db_unique_name }}'"
+  ansible.builtin.shell: |
+    export ORACLE_HOME={{ databases.primary.oracle_db_home }}
+    export PATH={{ databases.primary.oracle_db_home }}/bin:$PATH
+    export TNS_ADMIN={{ databases.primary.oracle_db_home }}/network/admin
+    tnsping {{ databases.primary.db_unique_name }}
   register: tnsping_primaryresult
   changed_when: false
   failed_when: false
   when: 
-      - inventory_hostname == standby_host 
+    - inventory_hostname == standby_host
 
 - name: Debug tnsping Output for primary database
   ansible.builtin.debug:
