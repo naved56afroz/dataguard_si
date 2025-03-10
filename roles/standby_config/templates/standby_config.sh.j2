@@ -81,7 +81,8 @@ SID_LIST_LISTENER =
 EOL
     fi
  
-    $ORACLE_HOME/bin/lsnrctl reload
+    su - {{ grid_user }} -c $GRID_HOME/bin/lsnrctl reload | tee -a "$MASTER_LOG"
+    su - {{ grid_user }} -c $GRID_HOME/bin/lsnrctl status | tee -a "$MASTER_LOG"
 
     # Create an initialization parameter with only DB_NAME
   echo "DB_NAME=${PRIMARY_DB_NAME}" > "$PFILE"
