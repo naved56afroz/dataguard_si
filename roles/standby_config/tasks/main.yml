@@ -90,7 +90,6 @@
     msg: "{{ precheck_output.stdout_lines }}"
   when: 
       - inventory_hostname == standby_host 
-      - standbyconfigdone is defined and not standbyconfigdone.stat.exists
 
 - name: Check connectivity to primary database from standby site
   ansible.builtin.shell: |
@@ -109,7 +108,6 @@
     msg: "{{ tnsping_primaryresult }}"
   when: 
       - inventory_hostname == standby_host 
-      - tnsping_primaryresult is not defined or 'OK' not in tnsping_primaryresult.stdout
 
 - name: Check connectivity to standby database from primary site
   ansible.builtin.shell: |
