@@ -152,9 +152,9 @@ else
 
 fi
 
-if [ $rman_exit_code -eq 0 ]; then
+if [ $rman_exit_code -eq 0 ] && ! grep -q "ORA-" "$MASTER_LOG" && ! grep -q "ERROR" "$MASTER_LOG"; then
     echo "RMAN completed successfully." | tee -a "$MASTER_LOG"
-elif [[ $rman_exit_code -eq 1 ]]; then
+elif [[ $rman_exit_code -eq 1 ]] && ! grep -q "ORA-" "$MASTER_LOG" && ! grep -q "ERROR" "$MASTER_LOG"; then
     echo "RMAN completed with warnings. Check logs for details." | tee -a "$MASTER_LOG"
 elif [[ $rman_exit_code -eq 2 ]]; then
     echo "RMAN failed due to errors. Review the log: $MASTER_LOG" | tee -a "$FAILURE_LOG"
