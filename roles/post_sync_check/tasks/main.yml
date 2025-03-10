@@ -81,7 +81,7 @@
 
 - name: Fail the play if Data Guard is not in sync
   ansible.builtin.fail:
-    msg: "Dataguard not in sync. Please check the error and fix it manually."
+    msg: "Dataguard not in sync. Please check the error and fix it manually.."
   when: primary_output.rc != 0
   delegate_to: "{{ primary_host }}"
   run_once: true
