@@ -131,7 +131,7 @@
 
 - name: Validate standby database connectivity from primary site
   ansible.builtin.fail:
-    msg: "Error: Standby database cannot be reached using TNS alias. Check listener status and tnsnames configuration."
+    msg: "Error: Standby database cannot be reached using TNS alias . Check listener status and tnsnames configuration."
   when: 
       - inventory_hostname == primary_host 
       - tnsping_standbyresult is not defined or 'OK' not in tnsping_standbyresult.stdout
