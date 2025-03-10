@@ -67,8 +67,8 @@ databases:
          oracle_db_home: /u01/product/19.3.0.0.0/database
          oracle_db_base: /u01/base
          grid_db_home: /u01/grid/home
-         file_dest: +DATA              # the value of db_create_file_dest db parameter in standby DB
-         online_log_dest1: +DATA       # the value of db_create_online_log_dest_1 parameter in standby DB
-         db_recovery_file_dest: +DATA     # the value of db_recovery_file_dest parameter in standby DB
+         file_dest: +DATAS              # the value of db_create_file_dest db parameter in standby DB
+         online_log_dest1: +DATAS       # the value of db_create_online_log_dest_1 parameter in standby DB
+         db_recovery_file_dest: +DATAS     # the value of db_recovery_file_dest parameter in standby DB
          db_recovery_file_dest_size: 5G
          port: 1521
