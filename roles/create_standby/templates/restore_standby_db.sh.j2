@@ -87,7 +87,7 @@ RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
     echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c rman target / cmdfile={{ scripts_dir }}/rman_restore.rcv log=$MASTER_LOG @{{ scripts_dir }}
+su - {{ db_oracle_user }} -c rman target / cmdfile={{ scripts_dir }}/rman_restore.rcv log=$MASTER_LOG
 
 # Capture RMAN exit status
 rman_exit_code=$?
