@@ -1,0 +1,43 @@
+---
+# Copyright (c) IBM Corporation 2021
+# tasks file for oracle_install
+- name: Run initialization tasks
+  ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
+  when: not init_done is defined
+
+- name: Checking if RMAN backup was already taken
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/rman.success"
+  register: rmandone
+  when: inventory_hostname == primary_host
+
+- name: Create RMAN backup dir
+  ansible.builtin.file:
+    path: "{{ backup_location }}"
+    state: "directory"
+    mode: '0777'
+
+- name: Copy RMAN backup script for primary
+  ansible.builtin.template:
+    src: backup_primary_db.sh.j2
+    dest: "{{ scripts_dir }}/backup_primary_db.sh"
+    mode: '0755'
+  vars:
+    database_name: "primary"
+  when: 
+      - inventory_hostname == primary_host 
+      - not rmandone.stat.exists | default(false)
+
+- name: Execute RMAN backup script on primary
+  ansible.builtin.shell: "{{ scripts_dir }}/backup_primary_db.sh"
+  register: precheck_output
+  when: 
+      - inventory_hostname == primary_host 
+      - not rmandone.stat.exists | default(false)
+
+- name: Debug Pre-config Output for RMAN  backup
+  ansible.builtin.debug:
+    msg: "{{ precheck_output.stdout_lines }}"
+  when: 
+      - inventory_hostname == primary_host 
+      - not rmandone.stat.exists | default(false)

@@ -1,0 +1,6 @@
+[primary]
+primary-db ansible_host=129.40.76.243
+
+[standby]
+standby-db ansible_host=129.40.76.242
+

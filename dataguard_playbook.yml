@@ -1,0 +1,35 @@
+# This playbook is used to configure dataguard for 19c.
+#
+# Before executing this playbook, please refer the documentation inside the docs directory.
+#
+#- hosts: all_nodes                            # Provide the name of the target lpar registered in ansible inventory.
+#  remote_user: root                     # This needs to be run by "root" user.
+#  gather_facts: False
+#  vars_files:
+#      - vars/dataguard/dataguard_vars.yml  # update all the required variables
+#      - vars/vault.yml       # update the passwords
+
+
+- name: Configure Data Guard for 19c
+  hosts: all
+  remote_user: root
+  gather_facts: false
+  vars_files:
+    - vars/dataguard/dataguard_vars.yml
+    - vars/vault.yml
+
+  roles:
+    - role: dataguard_precheck
+      tags: dataguard_precheck
+
+    - role: preconfig_primary
+      tags: preconfig_primary
+
+    - role: preconfig_standby
+      tags: preconfig_standby
+
+    - role: create_standby  
+      tags: create_standby
+
+    - role: sync_gap
+      tags: sync_gap
