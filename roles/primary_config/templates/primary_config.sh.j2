@@ -3,12 +3,13 @@
 export ORACLE_SID={{ databases[database_name].db_sid }}
 export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
 export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
-STANDBY_UNIQUE_NAME={{ databases.standby.db_unique_name }}
-PRIMARY_UNIQUE_NAME={{ databases[database_name].db_unique_name }}
+standby_unique_name={{ databases.standby.db_unique_name }}
+primary_unique_name={{ databases[database_name].db_unique_name }}
 primary_diskgroup={{ databases[database_name].file_dest }}
 standby_diskgroup={{ databases.standby.file_dest }}
-ORAPW_FILE="$ORACLE_HOME/dbs/orapw$ORACLE_SID"
-TNSNAMES_FILE="$ORACLE_HOME/network/admin/tnsnames.ora"
+orapw_file="$ORACLE_HOME/dbs/orapw$ORACLE_SID"
+tnsnames_file="$ORACLE_HOME/network/admin/tnsnames.ora"
+dataguard_protection_mode="{{ dataguard_protection_mode | lower }}"
 
 MASTER_LOG="{{ done_dir }}/primary_config.log"
 FAILURE_LOG="{{ done_dir }}/primary_config_failure.log"
@@ -25,6 +26,10 @@ SET PAGESIZE 0
 SET LINESIZE 1000
 SET TRIMOUT ON
 SET TRIMSPOOL ON
+SET ECHO ON;
+SET SERVEROUTPUT ON;
+WHENEVER SQLERROR EXIT SQL.SQLCODE;
+WHENEVER OSERROR EXIT FAILURE;
 
 -- Check current logging mode
 VARIABLE log_mode NUMBER;
@@ -100,9 +105,12 @@ else
   MISSING_SRL_COUNT=$((REQUIRED_SRL_COUNT - SRL_COUNT))
 
   ## 6. Execute redo log addition inside a single PL/SQL block
-  su - {{ db_oracle_user }} <<EOF
+  su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
   sqlplus -s / as sysdba <<SQL
+  SET ECHO ON;
   SET SERVEROUTPUT ON;
+  WHENEVER SQLERROR EXIT SQL.SQLCODE;
+  WHENEVER OSERROR EXIT FAILURE;
   DECLARE
     v_group_num NUMBER := $((MAX_GROUP + 1));
     v_sql       VARCHAR2(1000);
@@ -131,10 +139,12 @@ else
 fi
 
 # 8. Execute PFile command
-su - {{ db_oracle_user }} <<EOF
+su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
   sqlplus -s / as sysdba <<SQL
   SET ECHO ON;
   SET SERVEROUTPUT ON;
+  WHENEVER SQLERROR EXIT SQL.SQLCODE;
+  WHENEVER OSERROR EXIT FAILURE;
   $ADD_INIT_CMDS
   EXIT;
 SQL
@@ -144,10 +154,10 @@ EOF
 # Define the new entry
 NEW_ENTRY="
 
-$STANDBY_UNIQUE_NAME=
+$standby_unique_name=
 (DESCRIPTION =
   (ADDRESS_LIST =
-    (ADDRESS=(PROTOCOL=TCP) (HOST={{ standby_host }})(PORT={{ databases.standby.port }}))
+    (ADDRESS=(PROTOCOL=TCP) (HOST={{ standby_host }})(PORT={{ databases.standby.db_port }}))
   )
   (CONNECT_DATA =
     (SERVER=DEDICATED)
@@ -158,7 +168,7 @@ $STANDBY_UNIQUE_NAME=
 # Check if the entry already exists in tnsnames.ora before appending
 TNS_FILE="$ORACLE_HOME/network/admin/tnsnames.ora"
 
-if ! grep -q "$STANDBY_UNIQUE_NAME=" "$TNS_FILE"; then
+if ! grep -q "$standby_unique_name=" "$TNS_FILE"; then
   echo "$NEW_ENTRY" >> "$TNS_FILE"
   echo "Entry added to tnsnames.ora."
 else
@@ -166,34 +176,63 @@ else
 fi
 
 # 10. Copy PFILE, PWD and TNS file to standby
-/usr/bin/scp {{ scripts_dir }}/primary.pfile {{ standby_host }}:{{ scripts_dir }}/standby.pfile
+# Find the scp path dynamically
+SCP_CMD=$(which scp 2>/dev/null)
+
+# Check if scp is available
+if [ -z "$SCP_CMD" ]; then
+  echo "Error: scp command not found! Ensure scp is installed on this system." | tee -a "$FAILURE_LOG"
+  exit 1
+fi
+
+"$SCP_CMD"  {{ scripts_dir }}/primary.pfile {{ standby_host }}:{{ scripts_dir }}/standby.pfile
 
 # Check if orapw file exists
-if [[ ! -f "$ORAPW_FILE" ]]; then
-  echo "Error: Password file $ORAPW_FILE does not exist in $ORACLE_HOME." | tee -a "$FAILURE_LOG"
+if [[ ! -f "$orapw_file" ]]; then
+  echo "Error: Password file $orapw_file does not exist in $ORACLE_HOME." | tee -a "$FAILURE_LOG"
 else
-/usr/bin/scp "$ORAPW_FILE" "{{ standby_host }}:{{ scripts_dir }}/orapw{{ databases.standby.db_sid }}"
+"$SCP_CMD"  "$orapw_file" "{{ standby_host }}:{{ scripts_dir }}/orapw{{ databases.standby.db_sid }}"
 fi
 
 # Check if tnsnames.ora file exists
-if [[ ! -f "$TNSNAMES_FILE" ]]; then
-  echo "Error: TNS names file $TNSNAMES_FILE does not exist in $ORACLE_HOME." | tee -a "$FAILURE_LOG"
+if [[ ! -f "$tnsnames_file" ]]; then
+  echo "Error: TNS names file $tnsnames_file does not exist in $ORACLE_HOME." | tee -a "$FAILURE_LOG"
 else
-/usr/bin/scp "$TNSNAMES_FILE" "{{ standby_host }}:{{ scripts_dir }}/tnsnames.ora"
+"$SCP_CMD"  "$tnsnames_file" "{{ standby_host }}:{{ scripts_dir }}/tnsnames.ora"
 fi
 
-# 11. Modify the primary initialization parameter for dataguard on primary,
-su - {{ db_oracle_user }} <<EOF
+# 11. Set log_archive_dest_2 dynamically based on data protection modes
+    ## Maximum Performance (Default - ASYNC)
+    if [[ {{ dataguard_protection_mode }} == "maximum_performance" ]]; then
+        log_archive_dest_2="'service=${standby_unique_name} ASYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
+
+    ## Maximum Availability (SYNC)
+    elif [[ {{ dataguard_protection_mode }} == "maximum_availability" ]]; then
+        log_archive_dest_2="'service=${standby_unique_name} SYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
+
+    ## Maximum Protection (SYNC with AFFIRM)
+    elif [[ {{ dataguard_protection_mode }} == "maximum_protection" ]]; then
+        log_archive_dest_2="'service=${standby_unique_name} SYNC AFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
+    else
+        echo "Invalid data protection mode! Provide data protection modes out of three maximum_availability, maximum_performance, or maximum_protection." | tee -a "$FAILURE_LOG"
+        exit 1
+    fi
+
+
+# 12. Modify the primary initialization parameter for dataguard on primary,
+su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
   sqlplus -s / as sysdba <<SQL
   SET ECHO ON;
   SET SERVEROUTPUT ON;
-  alter system set LOG_ARCHIVE_CONFIG='DG_CONFIG=({{ databases[database_name].db_unique_name }},{{ databases.standby.db_unique_name }})' scope=both;
-  alter system set LOG_ARCHIVE_DEST_2='SERVICE={{ databases.standby.db_unique_name }}  LGWR ASYNC VALID_FOR=(ONLINE_LOGFILE,PRIMARY_ROLE) DB_UNIQUE_NAME={{ databases.standby.db_unique_name }}' scope=both;
+  WHENEVER SQLERROR EXIT SQL.SQLCODE;
+  WHENEVER OSERROR EXIT FAILURE;
+  alter system set LOG_ARCHIVE_CONFIG='DG_CONFIG=(${primary_unique_name},${standby_unique_name})' scope=both;
+  alter system set LOG_ARCHIVE_DEST_2=${log_archive_dest_2} scope=both;
   alter system set LOG_ARCHIVE_DEST_STATE_2=ENABLE scope=both;
-  alter system set FAL_SERVER={{ databases.standby.db_unique_name }} scope=both;
-  alter system set FAL_CLIENT={{ databases[database_name].db_unique_name }} scope=both;
-  alter system set DB_FILE_NAME_CONVERT='${standby_diskgroup}/${STANDBY_UNIQUE_NAME}','${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}' scope=spfile;
-  alter system set LOG_FILE_NAME_CONVERT='${standby_diskgroup}/${STANDBY_UNIQUE_NAME}','${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}' scope=spfile;
+  alter system set FAL_SERVER=${standby_unique_name} scope=both;
+  alter system set FAL_CLIENT=${primary_unique_name} scope=both;
+  alter system set DB_FILE_NAME_CONVERT='${standby_diskgroup}/${standby_unique_name}','${primary_diskgroup}/${primary_unique_name}' scope=spfile;
+  alter system set LOG_FILE_NAME_CONVERT='${standby_diskgroup}/${standby_unique_name}','${primary_diskgroup}/${primary_unique_name}' scope=spfile;
   EXIT;
 SQL
 EOF
@@ -211,7 +250,7 @@ else
 fi
 
 
-# 12. Check for failures and exit accordingly
+# 13. Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"

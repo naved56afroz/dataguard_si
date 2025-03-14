@@ -11,3 +11,5 @@ prenfsconfig:
     subdir: ''
 
 ora_version: "19.3.0.0.0"
+db_port: 1521
+dataguard_protection_mode: maximum_performance
