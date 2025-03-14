@@ -34,6 +34,7 @@ SELECT 'REDO_SIZES:' || LISTAGG(bytes, ',') WITHIN GROUP (ORDER BY group#) FROM 
 
 -- Precheck 4: Redo logs multiplexing
 SELECT 'MULTIPLEX_CHECK:' || COUNT(*) FROM v\$logfile lf JOIN v\$log l ON lf.group# = l.group# GROUP BY lf.group# HAVING COUNT(*) < 2;
+EXIT;
 SQL
 
 SQL_STATUS=$?
@@ -84,7 +85,7 @@ if [[ -s "$FAILURE_LOG" ]]; then
     exit 1
 fi
 
-echo "All pre-checks passed for primary database successfully!"
+echo "All pre-checks passed for primary database successfully!" | tee -a "$MASTER_LOG"
 rm -f "$FAILURE_LOG"
 touch "{{ done_dir }}/drprecheck.success"
 exit 0

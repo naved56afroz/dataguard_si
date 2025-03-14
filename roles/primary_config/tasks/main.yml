@@ -1,6 +1,7 @@
 ---
 # Copyright (c) IBM Corporation 2021
 # tasks file for oracle_install
+
 - name: Run initialization tasks
   ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
   when: not init_done is defined
@@ -15,8 +16,8 @@
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
   when:
-      - dataguarddone.stat.exists
-      - inventory_hostname == primary_host
+    - dataguarddone.stat.exists
+    - inventory_hostname == primary_host
   run_once: true
 
 - name: End play if Dataguard setup Task was done
@@ -24,45 +25,32 @@
   when: dataguarddone.stat.exists
   run_once: true
 
-- name: Checking if Primary pre configure was already done
+- name: Checking if Primary pre-configure was already done
   ansible.builtin.stat:
     path: "{{ done_dir }}/primary_config.success"
   register: primarypreconfigdone
   when: inventory_hostname == primary_host
 
-- name: Copy Dataguard Pre-config script for primary
-  ansible.builtin.template:
-    src: primary_config.sh.j2
-    dest: "{{ scripts_dir }}/primary_config.sh"
-    mode: '0755'
-  vars:
-    database_name: "primary"
-    standby_diskgroup: "{{ primary_diskgroup }}"
-  when: 
-      - inventory_hostname == primary_host 
-      - not primarypreconfigdone.stat.exists
+- name: Run Dataguard Pre-config tasks for primary
+  when:
+    - inventory_hostname == primary_host
+    - not primarypreconfigdone.stat.exists
+  block:
+    - name: Copy Dataguard Pre-config script for primary
+      ansible.builtin.template:
+        src: primary_config.sh.j2
+        dest: "{{ scripts_dir }}/primary_config.sh"
+        mode: '0755'
+      vars:
+        database_name: "primary"
+        standby_diskgroup: "{{ primary_diskgroup }}"
 
-- name: Execute Dataguard Pre-config script on primary
-  ansible.builtin.shell: "{{ scripts_dir }}/primary_config.sh"
-  register: precheck_output
-  failed_when: precheck_output.rc != 0
-  changed_when: false
-  when: 
-      - inventory_hostname == primary_host 
-      - not primarypreconfigdone.stat.exists
+    - name: Execute Dataguard Pre-config script on primary
+      ansible.builtin.command: "{{ scripts_dir }}/primary_config.sh"
+      register: precheck_output
+      failed_when: precheck_output.rc != 0
+      changed_when: false
 
-- name: Debug Pre-config Output for primary database
-  ansible.builtin.debug:
-    msg: "{{ precheck_output.stdout_lines }}"
-  when: 
-      - inventory_hostname == primary_host 
-      - not primarypreconfigdone.stat.exists
-
-
-
-
-
-
-
-
-
+    - name: Debug Pre-config Output for primary database
+      ansible.builtin.debug:
+        msg: "{{ precheck_output.stdout_lines }}"

@@ -1,14 +1,13 @@
 ---
 # defaults file for primary_config
 
-
 scripts_dir: [ "{{ work_dir }}", "scripts" ]
-done_dir:    [ "{{ work_dir }}", "done" ]
+done_dir: [ "{{ work_dir }}", "done" ]
 
 prenfsconfig:
  lpp_src:
     # !!! update !!!
-    subdir: ''
+  subdir: ''
 
 ora_version: "19.3.0.0.0"
 db_port: 1521

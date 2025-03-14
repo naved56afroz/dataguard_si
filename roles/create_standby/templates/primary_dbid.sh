@@ -24,11 +24,14 @@ SELECT dbid FROM v\$database;
 
 SQL
 
+# Capture SQL*Plus exit status
+sqlplus_exit_code=$?
+
 # Read DBID from log file
 PRIMARY_DBID=$(cat "$MASTER_LOG")
 
-# Validate DBID
-if [[ -z "$PRIMARY_DBID" ]]; then
+# Validate DBID and SQL*Plus exit status
+if [[ -z "$PRIMARY_DBID" || $sqlplus_exit_code -ne 0 ]]; then
   echo "ERROR: Failed to fetch DBID from Primary Database, verify manually and retry" | tee -a "$FAILURE_LOG"
   exit 1
 fi
@@ -36,7 +39,7 @@ fi
 # Print only the DBID (for Ansible to capture correctly)
 echo "$PRIMARY_DBID"
 
-#Check for failures and exit accordingly
+# Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"

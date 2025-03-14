@@ -39,7 +39,6 @@ END;
 /
 
 -- Put primary database in forced logging mode only if not already enabled
-WHENEVER SQLERROR EXIT FAILURE
 BEGIN
     IF :log_mode > 0 THEN
         EXECUTE IMMEDIATE 'ALTER DATABASE FORCE LOGGING';
@@ -68,12 +67,21 @@ SELECT 'SPFILE_CHECK:' || COUNT(*) FROM v\$parameter WHERE NAME = 'spfile' AND V
 
 SQL
 
+# Capture SQL*Plus exit status
+sqlplus_exit_code=$?
+
+# Check if the SQL*Plus command was successful
+if [[ $sqlplus_exit_code -ne 0 ]]; then
+    echo "ERROR: SQL*Plus command failed with exit status $sqlplus_exit_code. Check logs for details." | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
 # Extracting values using grep and awk
 DB_LOGGING=$(grep "DB_LOGGING:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 STDBY_FILE_MANAGEMENT=$(grep "STDBY_FILE_MANAGEMENT:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 REDO_COUNT=$(grep "REDO_COUNT:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
 MAX_GROUP=$(grep "MAX_GROUP:" "$MASTER_LOG" | awk -F '[:,]' '{print $4}')
-REDO_LOCATION=$(grep "REDO_LOCATION:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}' | sed -e 's:/.*::')
+REDO_LOCATION=$(grep "REDO_LOCATION:" "$MASTER_LOG" | awk -F '[:,]' '{print $2}')
 REDO_SIZE=$(grep "REDO_SIZE:" "$MASTER_LOG" | awk -F '[:,]' '{print $4}')
 SPFILE_CHECK=$(grep "SPFILE_CHECK:" "$MASTER_LOG" | awk -F ':' '{print $2}')
 SRL_COUNT=$(grep "SRL_COUNT:" "$MASTER_LOG" | awk -F ':' '{print $2}')
@@ -94,7 +102,7 @@ if [[ -z "$REDO_COUNT" || -z "$MAX_GROUP" || -z "$REDO_LOCATION" || -z "$REDO_SI
   exit 1
 fi
 
-# 4.  Required standby redo logs count (Redo count + 1)
+# 4. Required standby redo logs count (Redo count + 1)
 REQUIRED_SRL_COUNT=$((REDO_COUNT + 1))
 
 # 5. If SRLs are already sufficient, exit
@@ -129,12 +137,12 @@ SQL
 EOF
 fi
 
-#7. Handle PFILE/SPFILE
+# 7. Handle PFILE/SPFILE
 if [[ "$SPFILE_CHECK" -eq 1 ]]; then
   echo "Database is using SPFILE. Creating PFILE from SPFILE..."
   ADD_INIT_CMDS="CREATE PFILE='{{ scripts_dir }}/primary.pfile' FROM SPFILE;"
 else
-  echo "Database is using not using SPFILE. Creating PFILE from MEMORY..."
+  echo "Database is not using SPFILE. Creating PFILE from MEMORY..."
   ADD_INIT_CMDS="CREATE PFILE='{{ scripts_dir }}/primary.pfile' FROM MEMORY;"
 fi
 
@@ -202,24 +210,23 @@ else
 fi
 
 # 11. Set log_archive_dest_2 dynamically based on data protection modes
-    ## Maximum Performance (Default - ASYNC)
-    if [[ {{ dataguard_protection_mode }} == "maximum_performance" ]]; then
+case "{{ dataguard_protection_mode }}" in
+    maximum_performance)
         log_archive_dest_2="'service=${standby_unique_name} ASYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
-
-    ## Maximum Availability (SYNC)
-    elif [[ {{ dataguard_protection_mode }} == "maximum_availability" ]]; then
+        ;;
+    maximum_availability)
         log_archive_dest_2="'service=${standby_unique_name} SYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
-
-    ## Maximum Protection (SYNC with AFFIRM)
-    elif [[ {{ dataguard_protection_mode }} == "maximum_protection" ]]; then
+        ;;
+    maximum_protection)
         log_archive_dest_2="'service=${standby_unique_name} SYNC AFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${standby_unique_name}'"
-    else
-        echo "Invalid data protection mode! Provide data protection modes out of three maximum_availability, maximum_performance, or maximum_protection." | tee -a "$FAILURE_LOG"
+        ;;
+    *)
+        echo "Invalid data protection mode! Provide data protection modes out of three: maximum_availability, maximum_performance, or maximum_protection." | tee -a "$FAILURE_LOG"
         exit 1
-    fi
+        ;;
+esac
 
-
-# 12. Modify the primary initialization parameter for dataguard on primary,
+# 12. Modify the primary initialization parameter for dataguard on primary
 su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
   sqlplus -s / as sysdba <<SQL
   SET ECHO ON;
@@ -249,8 +256,7 @@ else
     exit 1
 fi
 
-
-# 13. Check for failures and exit accordingly
+# Check for failures and exit accordingly
 if [[ -s "$FAILURE_LOG" ]]; then
     cat "$FAILURE_LOG"
     rm -f "$FAILURE_LOG"
