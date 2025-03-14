@@ -8,10 +8,12 @@ export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
 # Identify if the host is PRIMARY or STANDBY
 if [[ "$(hostname -s)" == "{{ primary_host }}" ]]; then
     QUERY="SELECT SEQUENCE# FROM V\$LOG WHERE STATUS='CURRENT';"
+    SEQ_LABEL="PRIMARY_SEQ"
 elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
     QUERY="SELECT SEQUENCE# FROM V\$MANAGED_STANDBY WHERE PROCESS='MRP0';"
+    SEQ_LABEL="STANDBY_SEQ"
 else
-    echo "Invalid argument. "
+    echo "Invalid host. Exiting."
     exit 1
 fi
 
@@ -23,5 +25,14 @@ EXIT;
 EOF
 )
 
-# Print Sequence Number
-echo "$SEQUENCE_NUM"
+# Capture SQL*Plus exit status
+sqlplus_exit_code=$?
+
+# Check if the SQL*Plus command was successful
+if [[ $sqlplus_exit_code -ne 0 ]]; then
+    echo "ERROR: SQL*Plus command failed with exit status $sqlplus_exit_code. Exiting."
+    exit 1
+fi
+
+# Print Sequence Number with label
+echo "$SEQ_LABEL: $SEQUENCE_NUM"

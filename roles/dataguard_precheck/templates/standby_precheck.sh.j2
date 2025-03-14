@@ -31,6 +31,12 @@ SELECT COUNT(*) FROM v\$asm_diskgroup WHERE name=UPPER($dg_name);
 EXIT;
 SQL
 )
+        sql_exit_status=$?
+        if [[ $sql_exit_status -ne 0 ]]; then
+            echo "Error: SQL command failed with exit status $sql_exit_status." | tee -a "$FAILURE_LOG"
+            exit 1
+        fi
+
         exist_check=$(echo "$exist_check" | tr -d '[:space:]')
         
         if [[ "$exist_check" -eq 0 ]]; then
@@ -64,6 +70,12 @@ SELECT ROUND(USABLE_FILE_MB / 1024, 2) FROM v\$asm_diskgroup WHERE name=UPPER($d
 EXIT;
 SQL
 )
+        sql_exit_status=$?
+        if [[ $sql_exit_status -ne 0 ]]; then
+            echo "Error: SQL command failed with exit status $sql_exit_status." | tee -a "$FAILURE_LOG"
+            exit 1
+        fi
+
         available_space=$(echo "$available_space" | tr -d '[:space:]')
     else
         # JFS2 File System Available Space Check
@@ -79,7 +91,7 @@ SQL
     if [ "$available_space_int" -ge "$db_size_int" ]; then
         echo "Sufficient space available in $dg." | tee -a "$MASTER_LOG"
     else
-        echo "Error: Not enough space available in $dg. Required: ${db_size}G, Available: ${available_size}G" | tee -a "$FAILURE_LOG"
+        echo "Error: Not enough space available in $dg. Required: ${db_size}G, Available: ${available_space}G" | tee -a "$FAILURE_LOG"
         exit 1
     fi
 }
