@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: dataguard_precheck
+  role_name: primary_config
   author: Naved Afroz
   description: Ansible role performs pre config on primary site required to setup dataguard.
   company: IBM

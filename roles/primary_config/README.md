@@ -1,4 +1,4 @@
-# Ansible Role: preconfig_primary 
+# Ansible Role: primary_config 
  This role performs pre configuration at primary site for dataguard setup
 ## Requirements
 None.
@@ -12,7 +12,7 @@ dataguard_precheck
 
     - hosts: aix
       include_role:
-        name: preconfig_primary
+        name: primary_config
 
 ## Copyright
 © Copyright IBM Corporation 2020

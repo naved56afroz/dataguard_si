@@ -69,7 +69,31 @@
 - name: Execute Data Guard sync check on Primary
   ansible.builtin.shell: "{{ scripts_dir }}/sync_gap.sh"
   register: primary_output
+  failed_when: primary_output.rc != 0
+  changed_when: false
   when: inventory_hostname == primary_host
+
+- name: Set fact for Primary output
+  ansible.builtin.set_fact:
+    dg_sync_failed: "{{ primary_output.rc != 0 }}"
+  when: inventory_hostname == primary_host
+
+- name: Fail the play if Data Guard is not in sync
+  ansible.builtin.fail:
+    msg: "Dataguard not in sync. Please check the error and fix it manually."
+  when: 
+    - inventory_hostname == primary_host
+    - primary_output.rc is defined
+    - primary_output.rc != 0
+  run_once: true
+
+- name: End the play if Data Guard is not in sync
+  ansible.builtin.meta: end_play
+  when: 
+    - "'primary_output' in hostvars[primary_host]"
+    - "hostvars[primary_host].primary_output.rc is defined"
+    - "hostvars[primary_host].primary_output.rc != 0"
+  run_once: true
 
 - name: Extract Primary Sequence Number
   ansible.builtin.set_fact:

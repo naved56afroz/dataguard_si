@@ -58,42 +58,31 @@
       - inventory_hostname == primary_host 
       - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
-- name: Fetch DBID fact from primary to standby
-  ansible.builtin.set_fact:
-    standby_dbid: "{{ hostvars[primary_host].standby_dbid }}"
-  when: 
-      - inventory_hostname == standby_host and hostvars[primary_host].standby_dbid is defined
-      - restoredone.stat.exists is not defined or not restoredone.stat.exists
-
-- name: Copy DISKGROUP script from primary database
-  ansible.builtin.template:
-    src: ../../preconfig_standby/templates/diskgroup.sh
-    dest: "{{ scripts_dir }}/diskgroup.sh"
-    mode: '0755'
-  when: 
-      - inventory_hostname == primary_host 
-      
-- name: Fetch DISKGROUP from primary database
-  ansible.builtin.shell: "{{ scripts_dir }}/diskgroup.sh"
-  register: diskgroup_result
+- name: Fetch logical CPU count from primary (AIX)
+  ansible.builtin.shell: "lsdev -Cc processor | wc -l"
+  register: cpu_core_result
   changed_when: false
   when: 
-      - inventory_hostname == primary_host 
-      - restoredone.stat.exists is not defined or not restoredone.stat.exists      
-     
-- name: Set DISKGROUP as fact on primary database
-  ansible.builtin.set_fact:
-    standby_diskgroup: "{{ diskgroup_result.stdout | trim }}"
-  when: 
-      - inventory_hostname == primary_host  
+      - inventory_hostname == primary_host
       - restoredone.stat.exists is not defined or not restoredone.stat.exists
 
-- name: Fetch DISKGROUP fact from primary to standby
+- name: Set CPU core count as fact on primary
   ansible.builtin.set_fact:
-    standby_diskgroup: "{{ hostvars[primary_host].standby_diskgroup }}"
+    primary_cpu_core: "{{ cpu_core_result.stdout | trim }}"
   when: 
-      - inventory_hostname == standby_host and hostvars[primary_host].standby_diskgroup is defined
+      - inventory_hostname == primary_host
+      - cpu_core_result.stdout | trim | length > 0
       - restoredone.stat.exists is not defined or not restoredone.stat.exists
+
+- name: Fetch facts from primary to standby
+  ansible.builtin.set_fact:
+    standby_dbid: "{{ hostvars[primary_host].standby_dbid }}"
+    primary_cpu_core: "{{ hostvars[primary_host].primary_cpu_core }}"
+  when: 
+      - inventory_hostname == standby_host
+      - hostvars[primary_host].standby_dbid is defined and hostvars[primary_host].standby_dbid | length > 0
+      - hostvars[primary_host].primary_cpu_core is defined and hostvars[primary_host].primary_cpu_core | length > 0
+      - not restoredone.stat.exists
 
 - name: Copy RMAN restore script for standby
   ansible.builtin.template:
@@ -103,7 +92,7 @@
   vars:
     database_name: "standby"
     dbid: "{{ standby_dbid }}"
-    primary_diskgroup: "{{ standby_diskgroup }}"
+    primary_cpu_core: "{{ primary_cpu_core }}"
   when: 
       - inventory_hostname == standby_host 
       - not restoredone.stat.exists
@@ -117,7 +106,7 @@
       - inventory_hostname == standby_host 
       - not restoredone.stat.exists
 
-- name: Debug Pre-config Output for standby dataabse
+- name: Debug restore Output for standby database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 

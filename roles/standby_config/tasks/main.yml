@@ -1,0 +1,145 @@
+---
+# Copyright (c) IBM Corporation 2021
+# tasks file for oracle_install
+- name: Run initialization tasks
+  ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
+  when: not init_done is defined
+
+- name: Checking if Dataguard setup was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/dataguard.success"
+  register: dataguarddone
+  delegate_to: "{{ standby_host }}"
+  run_once: true
+
+- name: Set fact if Dataguard setup was done
+  ansible.builtin.set_fact:
+    dataguard_setup_done: "{{ dataguarddone.stat.exists | default(false) }}"
+  run_once: true
+
+- name: Exit if Dataguard setup was already done
+  ansible.builtin.fail:
+    msg: "Dataguard setup already done. Exiting."
+  when: dataguard_setup_done
+  run_once: true
+
+- name: End play if Dataguard setup Task was done
+  ansible.builtin.meta: end_play
+  when: dataguard_setup_done
+  run_once: true
+
+- name: Checking if Standby configuration was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/standby_config.success"
+  register: standbyconfigdone
+  when: inventory_hostname == standby_host
+
+- name: Create necessary directories for standby configuration
+  ansible.builtin.file:
+    path: "{{ databases.standby.oracle_db_base }}/admin/{{ databases.standby.db_unique_name }}/{{ item }}"
+    state: directory
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    mode: '0755'
+  loop:
+    - adump
+    - dpump
+  when: 
+    - inventory_hostname == standby_host 
+    - standbyconfigdone is defined and not standbyconfigdone.stat.exists
+
+- name: Copy necessary files for standby configuration
+  ansible.builtin.copy:
+    src: "{{ scripts_dir }}/{{ item.src }}"
+    dest: "{{ databases.standby.oracle_db_home }}/{{ item.dest }}"
+    owner: "{{ db_oracle_user }}"
+    group: "{{ db_oinstall_group }}"
+    remote_src: yes
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: "orapw{{ databases.standby.db_sid }}", dest: "dbs", mode: "0640" }
+    - { src: "tnsnames.ora", dest: "network/admin", mode: "0640" }
+    - { src: "standby.pfile", dest: "dbs", mode: "0644" }
+  when: 
+    - inventory_hostname == standby_host 
+    - standbyconfigdone is defined and not standbyconfigdone.stat.exists
+
+- name: Copy Dataguard config script for standby
+  ansible.builtin.template:
+    src: standby_config.sh.j2
+    dest: "{{ scripts_dir }}/standby_config.sh"
+    mode: '0755'
+  vars:
+    database_name: "standby"
+    primary_diskgroup: "{{ standby_diskgroup }}"
+  when: 
+      - inventory_hostname == standby_host 
+      - standbyconfigdone is defined and not standbyconfigdone.stat.exists
+  
+- name: Execute Dataguard config script on standby
+  ansible.builtin.shell: "{{ scripts_dir }}/standby_config.sh"
+  register: precheck_output
+  failed_when: precheck_output.rc != 0
+  changed_when: false
+  when: 
+      - inventory_hostname == standby_host 
+      - standbyconfigdone is defined and not standbyconfigdone.stat.exists
+
+- name: Debug config Output for standby database
+  ansible.builtin.debug:
+    msg: "{{ precheck_output.stdout_lines }}"
+  when: 
+      - inventory_hostname == standby_host 
+      - standbyconfigdone is defined and not standbyconfigdone.stat.exists
+
+- name: Check connectivity to primary database from standby site
+  ansible.builtin.shell: |
+    export ORACLE_HOME={{ databases.primary.oracle_db_home }}
+    export PATH={{ databases.primary.oracle_db_home }}/bin:$PATH
+    export TNS_ADMIN={{ databases.primary.oracle_db_home }}/network/admin
+    tnsping {{ databases.primary.db_unique_name }}
+  register: tnsping_primaryresult
+  changed_when: false
+  failed_when: false
+  when: 
+    - inventory_hostname == standby_host
+
+- name: Check connectivity to standby database from primary site
+  ansible.builtin.shell: |
+    export ORACLE_HOME={{ databases.standby.oracle_db_home }}
+    export PATH={{ databases.standby.oracle_db_home }}/bin:$PATH
+    export TNS_ADMIN={{ databases.standby.oracle_db_home }}/network/admin
+    tnsping {{ databases.standby.db_unique_name }}
+  register: tnsping_standbyresult
+  changed_when: false
+  failed_when: false
+  when: 
+    - inventory_hostname == primary_host
+
+- name: Validate primary database connectivity from standby site
+  ansible.builtin.fail:
+    msg: "Error: Remote primary database cannot be reached using TNS alias. Check listener status and tnsnames configuration."
+  when: 
+      - inventory_hostname == standby_host 
+      - tnsping_primaryresult is not defined or 'OK' not in tnsping_primaryresult.stdout
+
+- name: Validate standby database connectivity from primary site
+  ansible.builtin.fail:
+    msg: "Error: Standby database cannot be reached using TNS alias. Check listener status and tnsnames configuration."
+  when: 
+      - inventory_hostname == primary_host 
+      - tnsping_standbyresult is not defined or 'OK' not in tnsping_standbyresult.stdout
+
+- name: Confirm successful TNS connections from standby site
+  ansible.builtin.debug:
+    msg: "All good for TNS connections from standby!"
+  when: 
+      - inventory_hostname == standby_host 
+      - tnsping_primaryresult is defined and 'OK' in tnsping_primaryresult.stdout
+
+- name: Confirm successful TNS connections from primary site
+  ansible.builtin.debug:
+    msg: "All good for TNS connections from primary!"
+  when: 
+      - inventory_hostname == primary_host 
+      - tnsping_standbyresult is defined and 'OK' in tnsping_standbyresult.stdout

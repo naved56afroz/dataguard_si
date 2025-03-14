@@ -1,2 +1,2 @@
 # dataguard_si
-dr si setup
+dr si

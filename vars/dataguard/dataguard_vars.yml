@@ -8,40 +8,67 @@
 ###############################################################################
 
 ## Section A - Common Variables
-# config_type - to specify rac or single instance values rac and si
-# with_backup - true for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
-#             - false for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
+# rac:                      Specify true if rac setup or false in case of single instance
+# primary_host:             Provide hostname for primary server
+# standby_host:             Provide hostname for standby server
+# db_oracle_user:           Provide the RDBMS software owner, ex: oracle.
+# grid_user:                Provide the Grid software owner.
+# db_oinstall_group:        Provide the RDBMS software owner's primary group, ex: oinstall.
+# with_backup:              Specify true for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
+#                           Specify false for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
+# backup_location:          Provide backup location available on standby site
+
+# Section B - Primary and standby database details provide in each section respectively 
+
+# db_name:                         Provide database name 
+# db_sid:                          Provide SID name
+# db_unique_name:                  Provide Database Unique name must be different for both primary and standby
+# oracle_db_home:                  Provide oracle software home location
+# oracle_db_base:                  Provide oracle base  location
+# grid_db_home:                    Provide grid software home location
+# file_dest:                       Provide the value of db_create_file_dest db parameter in primary and standby DB
+# online_log_dest1:                Provide the value of db_create_online_log_dest_1 parameter in standby DB
+# db_recovery_file_dest:           Provide the value of db_recovery_file_dest parameter in standby DB
+# db_recovery_file_dest_size:      Provide recovery destination size only for standby site
+# port:                            Provide
 
 # Provide the ansible work directory on target system
 work_dir:   &work_dir "/tmp/ansible"
 
 # Section A - Update the Common Variables.
 
-config_type: si
+rac: false
 primary_host: primary-db
 standby_host: standby-db
 db_oracle_user: oracle
 grid_user: grid
 db_oinstall_group: oinstall
-with_backup: false
-backup_location: /u01/backup  
+with_backup: true
+backup_location: /u01/backup
+sys_user: sys
+
+
+# Section B - Primary and standby database details
 
 databases:  
   primary:
-         oracle_db_name: orcl
-         oracle_db_sid: orcl
-         oracle_db_unique_name: orcl
+         db_name: orcl
+         db_sid: orcl
+         db_unique_name: orcl
          oracle_db_home: /u01/product/19.3.0.0.0/database
          oracle_db_base: /u01/base
          grid_db_home: /u01/grid/home
-
+         file_dest: +DATA              # the value of db_create_file_dest db parameter in primary DB
   standby:
-         oracle_db_name: orcl
-         oracle_db_sid: orcl
-         oracle_db_unique_name: orcls
+         db_name: orcl
+         db_sid: orcl
+         db_unique_name: orcls
+         db_service_name: orcls
          oracle_db_home: /u01/product/19.3.0.0.0/database
          oracle_db_base: /u01/base
          grid_db_home: /u01/grid/home
-         db_recovery_file_dest: /u01/archive
+         file_dest: +DATAS              # the value of db_create_file_dest db parameter in standby DB
+         online_log_dest1: +DATAS       # the value of db_create_online_log_dest_1 parameter in standby DB
+         db_recovery_file_dest: +DATAS     # the value of db_recovery_file_dest parameter in standby DB
          db_recovery_file_dest_size: 5G
-         
+         port: 1521
