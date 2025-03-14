@@ -8,15 +8,27 @@
 ###############################################################################
 
 ## Section A - Common Variables
-# rac:                      Specify true if rac setup or false in case of single instance
-# primary_host:             Provide hostname for primary server
-# standby_host:             Provide hostname for standby server
-# db_oracle_user:           Provide the RDBMS software owner, ex: oracle.
-# grid_user:                Provide the Grid software owner.
-# db_oinstall_group:        Provide the RDBMS software owner's primary group, ex: oinstall.
-# with_backup:              Specify true for Backup-Based (No Target Connection) from external RMAN backup. Default value NO .
-#                           Specify false for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE
-# backup_location:          Provide backup location available on standby site
+# rac:                       Specify true if rac setup or false in case of single instance
+# primary_host:              Provide hostname for primary server
+# standby_host:              Provide hostname for standby server
+# db_oracle_user:            Provide the RDBMS software owner, ex: oracle.
+# grid_user:                 Provide the Grid software owner.
+# db_oinstall_group:         Provide the RDBMS software owner's primary group, ex: oinstall.
+# with_backup:               Specify true for Backup-Based (No Target Connection) from external RMAN backup. 
+#                            Specify false for Standby Duplication Using RMAN DUPLICATE...FROM ACTIVE DATABASE. Default value false .
+# backup_location:           Provide backup location available on standby site
+# ignore_precheck:           Provide true or false based on requirement to continue with warnings. Default value  false .
+# dataguard_protection_mode: Provide data protection modes out of three maximum_availability, maximum_performance, or maximum_protection.
+#                            default to maximum_performance
+#
+#                                   |----------------------------------------|---------------------------------|
+#                                   |             Standby Mode	              |        Transport Process        |
+#                                   |----------------------------------------|---------------------------------|
+#                                   |         Maximum Performance            |        ASYNC    NOAFFIRM	      |
+#                                   |         Maximum Availability           |        SYNC     NOAFFIRM/AFFIRM |
+#                                   |         Maximum Protection             |        SYNC     AFFIRM          |
+#                                   |----------------------------------------|---------------------------------|
+
 
 # Section B - Primary and standby database details provide in each section respectively 
 
@@ -30,7 +42,7 @@
 # online_log_dest1:                Provide the value of db_create_online_log_dest_1 parameter in standby DB
 # db_recovery_file_dest:           Provide the value of db_recovery_file_dest parameter in standby DB
 # db_recovery_file_dest_size:      Provide recovery destination size only for standby site
-# port:                            Provide
+# db_port:                         Provide port# for standby database . Default db_port 1521
 
 # Provide the ansible work directory on target system
 work_dir:   &work_dir "/tmp/ansible"
@@ -46,7 +58,8 @@ db_oinstall_group: oinstall
 with_backup: true
 backup_location: /u01/backup
 sys_user: sys
-
+ignore_precheck: false
+dataguard_protection_mode: maximum_performance
 
 # Section B - Primary and standby database details
 
@@ -58,7 +71,7 @@ databases:
          oracle_db_home: /u01/product/19.3.0.0.0/database
          oracle_db_base: /u01/base
          grid_db_home: /u01/grid/home
-         file_dest: +DATA              # the value of db_create_file_dest db parameter in primary DB
+         file_dest: +DATA                 # the value of db_create_file_dest db parameter in primary DB
   standby:
          db_name: orcl
          db_sid: orcl
@@ -67,8 +80,8 @@ databases:
          oracle_db_home: /u01/product/19.3.0.0.0/database
          oracle_db_base: /u01/base
          grid_db_home: /u01/grid/home
-         file_dest: +DATAS              # the value of db_create_file_dest db parameter in standby DB
-         online_log_dest1: +DATAS       # the value of db_create_online_log_dest_1 parameter in standby DB
+         file_dest: +DATAS                 # the value of db_create_file_dest db parameter in standby DB
+         online_log_dest1: +DATAS          # the value of db_create_online_log_dest_1 parameter in standby DB
          db_recovery_file_dest: +DATAS     # the value of db_recovery_file_dest parameter in standby DB
          db_recovery_file_dest_size: 5G
-         port: 1521
+         db_port: 1521

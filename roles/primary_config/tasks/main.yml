@@ -9,23 +9,19 @@
   ansible.builtin.stat:
     path: "{{ done_dir }}/dataguard.success"
   register: dataguarddone
-  delegate_to: "{{ standby_host }}"
-  run_once: true
-
-- name: Set fact if Dataguard setup was done
-  ansible.builtin.set_fact:
-    dataguard_setup_done: "{{ dataguarddone.stat.exists | default(false) }}"
-  run_once: true
+  when: inventory_hostname == primary_host
 
 - name: Exit if Dataguard setup was already done
   ansible.builtin.fail:
     msg: "Dataguard setup already done. Exiting."
-  when: dataguard_setup_done
+  when:
+      - dataguarddone.stat.exists
+      - inventory_hostname == primary_host
   run_once: true
 
 - name: End play if Dataguard setup Task was done
   ansible.builtin.meta: end_play
-  when: dataguard_setup_done
+  when: dataguarddone.stat.exists
   run_once: true
 
 - name: Checking if Primary pre configure was already done

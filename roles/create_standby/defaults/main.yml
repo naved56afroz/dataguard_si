@@ -11,3 +11,7 @@ prenfsconfig:
     subdir: ''
 
 ora_version: "19.3.0.0.0"
+standby_cpu_core: 4
+primary_cpu_core: 4
+with_backup: false
+dataguard_protection_mode: maximum_performance

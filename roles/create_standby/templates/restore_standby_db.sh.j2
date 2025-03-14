@@ -11,9 +11,12 @@ FAILURE_LOG="{{ done_dir }}/standby_rman_restore_fail.log"
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
 
-# Define values
+# Define values for diskgroup
 primary_diskgroup={{ databases.primary.file_dest }}
 standby_diskgroup={{ databases[database_name].file_dest }}
+# Define the number of CPU cores
+standby_cpu_core={{ standby_cpu_core }}
+primary_cpu_core={{ primary_cpu_core }}
 
 # Check if the standby database is already running by checking PMON process
 if ps -ef | grep "pmon" | grep -q "$ORACLE_SID"; then
@@ -26,7 +29,7 @@ SQL
 fi
 
 # Convert 'with_backup' variable to lowercase for consistency
-WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+WITH_BACKUP="$(echo {{ with_backup }} | tr '[:upper:]' '[:lower:]')"
 # RMAN restore Backup-based
 if [[ "$WITH_BACKUP" == "true" ]]; then
 
@@ -40,15 +43,11 @@ if [[ "$WITH_BACKUP" == "true" ]]; then
  
  # Check if a control file backup exists
    if [[ -z "$LATEST_CONTROLFILE" ]]; then
-       echo "ERROR: No control file backup found!"
+       echo "ERROR: No control file backup found!" | tee -a "$FAILURE_LOG"
        exit 1
    fi
  
  echo "Using latest control file backup: $LATEST_CONTROLFILE"
- 
- # Determine the number of CPU cores
-standby_cpu_core=$(lsdev -Cc processor | wc -l)
-primary_cpu_core={{ primary_cpu_core }}
 
 {
     echo "RUN {"
@@ -105,7 +104,25 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
  db_create_online_log_dest_1="{{ databases[database_name].online_log_dest1 }}"
  db_recovery_file_dest="{{ databases[database_name].db_recovery_file_dest }}"
  db_recovery_file_dest_size="{{ databases[database_name].db_recovery_file_dest_size }}"
- 
+ dataguard_protection_mode="{{ dataguard_protection_mode | lower }}"
+
+# Set log_archive_dest_2 dynamically based on data protection modes
+    ## Maximum Performance (Default - ASYNC)
+    if [[ {{ dataguard_protection_mode }} == "maximum_performance" ]]; then
+        log_archive_dest_2="'service=${primary_unique_name} ASYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${primary_unique_name}'"
+
+    ## Maximum Availability (SYNC)
+    elif [[ {{ dataguard_protection_mode }} == "maximum_availability" ]]; then
+        log_archive_dest_2="'service=${primary_unique_name} SYNC NOAFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${primary_unique_name}'"
+
+    ## Maximum Protection (SYNC with AFFIRM)
+    elif [[ {{ dataguard_protection_mode }} == "maximum_protection" ]]; then
+        log_archive_dest_2="'service=${primary_unique_name} SYNC AFFIRM valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${primary_unique_name}'"
+    else
+        echo "Invalid data protection mode! Provide data protection modes out of three maximum_availability, maximum_performance, or maximum_protection." | tee -a "$FAILURE_LOG"
+        exit 1
+    fi
+
  {
     echo "RUN {"
 
@@ -115,7 +132,8 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
         echo "    ALLOCATE CHANNEL prmy$i DEVICE TYPE DISK ;"
         i=`expr $i + 1`
     done
-      
+      echo "    ALLOCATE auxiliary CHANNEL stby TYPE DISK;"
+      echo ""
       echo " duplicate target database for standby from active database NOFILENAMECHECK"
       echo " spfile"
       echo "   parameter_value_convert '${primary_unique_name}','${standby_unique_name}'"
@@ -128,9 +146,9 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
       echo "   set log_archive_max_processes='5'"
       echo "   set fal_client='${standby_unique_name}'"
       echo "   set fal_server='${primary_unique_name}'"
-      echo "   set standby_file_management='MANUAL'"
+      echo "   set standby_file_management='AUTO'"
       echo "   set log_archive_config='dg_config=(${primary_unique_name},${standby_unique_name})'"
-      echo "   set log_archive_dest_2='service=${primary_unique_name} ASYNC valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${primary_unique_name}'"
+      echo "   set log_archive_dest_2=${log_archive_dest_2}"
       echo "   set db_create_online_log_dest_1='${db_create_online_log_dest_1}'"
       echo "   set db_recovery_file_dest='${db_recovery_file_dest}'"
       echo "   set db_recovery_file_dest_size='${db_recovery_file_dest_size}'"
@@ -139,7 +157,7 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
       echo "EXIT;"
 } > "$RMAN_SCRIPT"
 
-su - {{ db_oracle_user }} -c rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
+su - {{ db_oracle_user }} -c rman target {{ sys_user }}/$1@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/$1@${standby_unique_name} cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
 
 # Capture RMAN exit status
 rman_exit_code=$?
@@ -173,5 +191,4 @@ fi
 
 echo "Dataguard setup completed successfully!"
 rm -f "$FAILURE_LOG"
-#rm -f "{{ scripts_dir }}/restore_standby_db.sh"
 exit 0

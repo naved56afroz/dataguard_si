@@ -22,11 +22,14 @@ log_archive_config="'DG_CONFIG=(${STANDBY_UNIQUE_NAME},${PRIMARY_UNIQUE_NAME})'"
 log_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
 db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
 audit_file_dest="'${oracle_db_base}/admin/${STANDBY_UNIQUE_NAME}/adump'"
-local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT={{ databases[database_name].port }}))'"
+local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT={{ databases[database_name].db_port }}))'"
 listener_file=${GRID_HOME}/network/admin/listener.ora
+db_create_file_dest="'${standby_diskgroup}'"
+db_recovery_file_dest="'${db_recovery_file_dest}'"
+db_create_online_log_dest_1="'${db_create_online_log_dest_1}'"
 
 # Convert 'with_backup' variable to lowercase for consistency
-WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+WITH_BACKUP="$(echo {{ with_backup }} | tr '[:upper:]' '[:lower:]')"
 
 if [[ "$WITH_BACKUP" == "true" ]]; then 
 
@@ -39,17 +42,17 @@ if [[ "$WITH_BACKUP" == "true" ]]; then
 
   # Append updated parameters at the end
   cat <<EOF >> "$TMP_FILE"
-*.db_unique_name = ${STANDBY_UNIQUE_NAME}
-*.audit_file_dest = ${audit_file_dest}
-*.log_archive_dest_1 = ${log_archive_dest_1}
-*.control_files = ${db_create_online_log_dest_1}
-*.LOG_FILE_NAME_CONVERT = ${log_file_name_convert}
-*.DB_FILE_NAME_CONVERT = ${db_file_name_convert}
-*.db_create_file_dest= ${standby_diskgroup}
-*.db_create_online_log_dest_1= ${db_create_online_log_dest_1}
-*.db_recovery_file_dest= ${db_recovery_file_dest}
-*.db_recovery_file_dest_size= ${db_recovery_file_dest_size} 
-*.LOG_ARCHIVE_CONFIG= ${log_archive_config}
+*.db_unique_name =${STANDBY_UNIQUE_NAME}
+*.audit_file_dest =${audit_file_dest}
+*.log_archive_dest_1 =${log_archive_dest_1}
+*.control_files =${db_create_online_log_dest_1}
+*.LOG_FILE_NAME_CONVERT =${log_file_name_convert}
+*.DB_FILE_NAME_CONVERT =${db_file_name_convert}
+*.db_create_file_dest=${db_create_file_dest}
+*.db_create_online_log_dest_1=${db_create_online_log_dest_1}
+*.db_recovery_file_dest=${db_recovery_file_dest}
+*.db_recovery_file_dest_size=${db_recovery_file_dest_size} 
+*.LOG_ARCHIVE_CONFIG=${log_archive_config}
 *.LOCAL_LISTENER= ${local_listener}
 EOF
 

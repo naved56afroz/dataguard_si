@@ -15,7 +15,7 @@ TMP_FILE="${PFILE}.tmp"
 > "$FAILURE_LOG"
 
 # Convert 'with_backup' variable to lowercase for consistency
-WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+WITH_BACKUP="$(echo {{ with_backup }} | tr '[:upper:]' '[:lower:]')"
 
 # Check if RMAN Restore was successful
 if [[ "$WITH_BACKUP" == "true" ]]; then 
@@ -51,7 +51,6 @@ elif [[ "$WITH_BACKUP" == "false" ]]; then
   # Check if media recovery is active
   STATUS=$(su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
   SET HEADING OFF FEEDBACK OFF VERIFY OFF ECHO OFF
-  ALTER SYSTEM SET standby_file_management='AUTO' scope=both sid='*';
   SELECT COUNT(*) FROM V\$MANAGED_STANDBY WHERE PROCESS = 'MRP0';
   EXIT;
 SQL
@@ -62,7 +61,7 @@ SQL
   
   if [[ "$STATUS" -gt 0 ]]; then
       echo "Media recovery is already active. No action needed." | tee -a "$MASTER_LOG"
-      touch "{{ done_dir }}/dataguard.success"
+      touch "{{ done_dir }}/post_restore.success"
       exit 0
   else
       echo "Starting media recovery..." | tee -a "$MASTER_LOG"
@@ -70,7 +69,7 @@ SQL
       ALTER DATABASE RECOVER MANAGED STANDBY DATABASE DISCONNECT FROM SESSION;
       EXIT;
 SQL
-      touch "{{ done_dir }}/dataguard.success"
+      touch "{{ done_dir }}/post_restore.success"
   fi
 
 else
@@ -86,5 +85,5 @@ if [[ -s "$FAILURE_LOG" ]]; then
 fi
 
 echo "Dataguard recovery process started successfully" | tee -a "$MASTER_LOG"
-touch "{{ done_dir }}/dataguard.success"
+touch "{{ done_dir }}/post_restore.success"
 exit 0
