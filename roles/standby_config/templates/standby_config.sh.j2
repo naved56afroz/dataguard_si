@@ -1,0 +1,130 @@
+#!/bin/bash
+
+# Define values dynamically
+ORACLE_HOME="{{ databases[database_name].oracle_db_home }}"
+GRID_HOME="{{ databases[database_name].grid_db_home }}"
+ORACLE_SID="{{ databases[database_name].db_sid }}"
+PFILE=${ORACLE_HOME}/dbs/init${ORACLE_SID}.ora
+oracle_db_base="{{ databases[database_name].oracle_db_base }}"
+primary_diskgroup="{{ databases.primary.file_dest }}"
+standby_diskgroup="{{ databases[database_name].file_dest }}"
+PRIMARY_UNIQUE_NAME="{{ databases.primary.db_unique_name }}"
+PRIMARY_DB_NAME="{{ databases.primary.db_name }}"
+STANDBY_UNIQUE_NAME="{{ databases[database_name].db_unique_name }}"
+db_recovery_file_dest="{{ databases[database_name].db_recovery_file_dest }}"
+db_recovery_file_dest_size="{{ databases[database_name].db_recovery_file_dest_size }}"
+db_create_online_log_dest_1="{{ databases[database_name].online_log_dest1 }}"
+MASTER_LOG="{{ done_dir }}/standby_tns.log"
+FAILURE_LOG="{{ done_dir }}/standby_tns_fail.log"
+
+log_archive_dest_1="'LOCATION=USE_DB_RECOVERY_FILE_DEST'"
+log_archive_config="'DG_CONFIG=(${STANDBY_UNIQUE_NAME},${PRIMARY_UNIQUE_NAME})'"
+log_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
+db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
+audit_file_dest="'${oracle_db_base}/admin/${STANDBY_UNIQUE_NAME}/adump'"
+local_listener="'(ADDRESS=(PROTOCOL=TCP)(HOST={{ standby_host }})(PORT={{ databases[database_name].port }}))'"
+listener_file=${GRID_HOME}/network/admin/listener.ora
+
+# Convert 'with_backup' variable to lowercase for consistency
+WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+
+if [[ "$WITH_BACKUP" == "true" ]]; then 
+
+  # Take a backup before modifying
+  cp ${ORACLE_HOME}/dbs/standby.pfile "$PFILE"
+  TMP_FILE="${PFILE}.tmp"
+
+  # Remove all matching parameters in one go and create a temp file
+  awk 'tolower($0) !~ /(db_unique_name|audit_file_dest|log_archive_dest_1|control_files|log_file_name_convert|db_file_name_convert|db_create_file_dest|db_create_online_log_dest_1|db_recovery_file_dest|db_recovery_file_dest_size|LOG_ARCHIVE_CONFIG|LOCAL_LISTENER)/' "$PFILE" > "$TMP_FILE"
+
+  # Append updated parameters at the end
+  cat <<EOF >> "$TMP_FILE"
+*.db_unique_name = ${STANDBY_UNIQUE_NAME}
+*.audit_file_dest = ${audit_file_dest}
+*.log_archive_dest_1 = ${log_archive_dest_1}
+*.control_files = ${db_create_online_log_dest_1}
+*.LOG_FILE_NAME_CONVERT = ${log_file_name_convert}
+*.DB_FILE_NAME_CONVERT = ${db_file_name_convert}
+*.db_create_file_dest= ${standby_diskgroup}
+*.db_create_online_log_dest_1= ${db_create_online_log_dest_1}
+*.db_recovery_file_dest= ${db_recovery_file_dest}
+*.db_recovery_file_dest_size= ${db_recovery_file_dest_size} 
+*.LOG_ARCHIVE_CONFIG= ${log_archive_config}
+*.LOCAL_LISTENER= ${local_listener}
+EOF
+
+  # Replace the original file
+  mv "$TMP_FILE" "$PFILE"
+  chown {{ db_oracle_user }}:{{ db_oinstall_group }} "$PFILE"
+  chmod 755 "$PFILE"
+
+  # Verify changes
+  echo "Updated standby.pfile:"
+  cat "$PFILE"
+
+elif [[ "$WITH_BACKUP" == "false" ]]; then
+
+# Insert a static entry for standby in the listener.ora file if not updated before
+    if ! grep -q "${STANDBY_UNIQUE_NAME}" "$listener_file"; then
+        cp "$listener_file" "${listener_file}.bak"
+        echo "Updating listener.ora..."
+        cat <<EOL >> "$listener_file"
+
+
+SID_LIST_LISTENER =
+  (SID_LIST =
+    (SID_DESC =
+     (GLOBAL_DBNAME = ${STANDBY_UNIQUE_NAME})
+     (ORACLE_HOME = ${ORACLE_HOME})
+     (SID_NAME = ${ORACLE_SID})
+    )
+   )
+
+EOL
+    fi
+ 
+    su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl reload"  >> "$MASTER_LOG"
+if [ $? -eq 0 ]; then
+    echo "Listener reload successful" | tee -a "$MASTER_LOG"
+else
+    echo "Listener reload failed" | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
+su - {{ grid_user }} -c "$GRID_HOME/bin/lsnrctl status" >> "$MASTER_LOG"
+if [ $? -eq 0 ]; then
+    echo "Listener is running successfully" | tee -a "$MASTER_LOG"
+else
+    echo "Listener status check failed" | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
+if grep -q "Instance \"${ORACLE_SID}\", status UNKNOWN" "$MASTER_LOG"; then
+    echo "Instance '${ORACLE_SID}' is in UNKNOWN state!"
+else
+    echo "Instance '${ORACLE_SID}' is not in UNKNOWN state."
+    exit 1
+fi
+
+    # Create an initialization parameter with only DB_NAME
+  echo "DB_NAME=${PRIMARY_DB_NAME}" > "$PFILE"
+  chown {{ db_oracle_user }}:{{ db_oinstall_group }} "$PFILE"
+  chmod 755 "$PFILE"
+
+else
+    echo "ERROR: Invalid value for 'with_backup'. Please provide 'true' or 'false'." | tee -a "$FAILURE_LOG"
+    exit 1
+fi
+
+#  Check for failures and exit accordingly
+if [[ -s "$FAILURE_LOG" ]]; then
+    cat "$FAILURE_LOG"
+    rm -f "$FAILURE_LOG"
+    exit 1
+fi
+
+echo "Standby PFILE,PWD file copied, and TNS entries updated."
+echo "All pre-config performed for standby database successfully!"
+rm -f "$FAILURE_LOG"
+touch "{{ done_dir }}/standby_config.success"
+exit 0

@@ -1,5 +1,5 @@
 ---
-# defaults file for dataguard_precheck
+# defaults file for primary_config
 
 
 scripts_dir: [ "{{ work_dir }}", "scripts" ]

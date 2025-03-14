@@ -10,7 +10,7 @@ FAILURE_LOG="{{ done_dir }}/dg_sync_failure.log"
 if [[ "$(hostname -s)" == "{{ primary_host }}" ]]; then
 
     # Primary
-    export ORACLE_SID={{ databases.primary.oracle_db_sid }}
+    export ORACLE_SID={{ databases.primary.db_sid }}
     export ORACLE_HOME={{ databases.primary.oracle_db_home }}
     export PATH={{ databases.primary.oracle_db_home }}/bin:$PATH
 
@@ -50,7 +50,7 @@ SQL
 elif [[ "$(hostname -s)" == "{{ standby_host }}" ]]; then
 
     # Standby
-    export ORACLE_SID={{ databases.standby.oracle_db_sid }}
+    export ORACLE_SID={{ databases.standby.db_sid }}
     export ORACLE_HOME={{ databases.standby.oracle_db_home }}
     export PATH={{ databases.standby.oracle_db_home }}/bin:$PATH
 
@@ -105,6 +105,8 @@ SQL
         
         # Get sequence# if MRP process is running 
         if [[ "$MRP_RUNNING" -eq 1 ]]; then
+            echo "Waiting for 180 seconds to allow standby to sync..." 
+            sleep 180
             su - {{ db_oracle_user }} -c "sqlplus -s / as sysdba" <<SQL | tee -a "$MASTER_LOG"
             SET HEADING OFF
             SET FEEDBACK OFF

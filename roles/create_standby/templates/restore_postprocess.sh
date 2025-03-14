@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export ORACLE_SID={{ databases.standby.oracle_db_sid }}
+export ORACLE_SID={{ databases.standby.db_sid }}
 export ORACLE_HOME={{ databases.standby.oracle_db_home }}
 export PATH={{ databases.standby.oracle_db_home }}/bin:$PATH
 

@@ -35,7 +35,7 @@
       - inventory_hostname == primary_host 
       - not rmandone.stat.exists | default(false)
 
-- name: Debug Pre-config Output for RMAN  backup
+- name: Debug Output for RMAN backup
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 

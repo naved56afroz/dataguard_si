@@ -28,7 +28,7 @@
   when: dataguard_setup_done
   run_once: true
 
-# Precheck 24: Verify network connectivity between primary and standby
+# Precheck : Verify network connectivity between primary and standby
 - name: Verify primary can ping standby host
   ansible.builtin.command: "ping -c 2 {{ standby_host }}"
   register: ping_primary_to_standby
@@ -57,6 +57,73 @@
       - ping_standby_to_primary.rc | default(0) != 0 and ping_standby_to_primary is defined
       - inventory_hostname == standby_host
 
+# Precheck : check Grid home patch set
+
+- name: Get release patch details from site
+  ansible.builtin.shell: "{{ databases.primary.grid_db_home }}/bin/crsctl query has releasepatch" 
+  register: patch_info
+
+- name: Set patch level and patches facts
+  ansible.builtin.set_fact:
+    patch_level: "{{ patch_info.stdout | regex_search('Oracle Clusterware release patch level is \\[(.*?)\\]', '\\1') }}"
+    patches: "{{ patch_info.stdout | regex_search('complete list of patches \\[(.*?)\\]', '\\1') }}"
+
+- name: Set standby patch details for comparison (on standby only)
+  ansible.builtin.set_fact:
+    standby_patch_level: "{{ patch_level }}"
+    standby_patches: "{{ patches }}"
+  when: inventory_hostname == standby_host 
+
+- name: Set primary patch details for comparison (on primary only)
+  ansible.builtin.set_fact:
+    primary_patch_level: "{{ patch_level }}"
+    primary_patches: "{{ patches }}"
+  when: inventory_hostname == primary_host 
+
+- name: Fail if patch levels or patches do not match between primary and standby
+  ansible.builtin.fail:
+    msg: "Patch levels or patches mismatch between primary and standby databases!"
+  when:
+      - not ignore_precheck | default(false)  # Only fail if ignore_precheck is false
+      - hostvars[primary_host].primary_patch_level != hostvars[standby_host].standby_patch_level
+      - hostvars[primary_host].primary_patches != hostvars[standby_host].standby_patches
+
+# Precheck : check Oracle DB home patch set
+
+- name: Get applied patches from Oracle DB home
+  ansible.builtin.shell: "{{ databases.primary.oracle_db_home }}/OPatch/opatch lspatches | grep -v 'OPatch succeeded'"
+  register: patch_info
+  become: yes
+  become_method: su
+  become_user: "{{db_oracle_user}}"
+
+- name: Set patch list facts
+  ansible.builtin.set_fact:
+    patch_list: "{{ patch_info.stdout_lines | sort }}"
+
+- name: Set standby patch details for comparison (on standby only)
+  ansible.builtin.set_fact:
+    standby_patch_list: "{{ patch_list }}"
+  when: inventory_hostname == standby_host
+
+- name: Set primary patch details for comparison (on primary only)
+  ansible.builtin.set_fact:
+    primary_patch_list: "{{ patch_list }}"
+  when: inventory_hostname == primary_host
+
+- name: Fail if patch lists do not match between primary and standby
+  ansible.builtin.fail:
+    msg: >
+      Patch mismatch between primary and standby!
+      Primary: {{ hostvars[primary_host].primary_patch_list }}
+      Standby: {{ hostvars[standby_host].standby_patch_list }}
+  when: 
+      - not ignore_precheck | default(false)  # Only fail if ignore_precheck is false
+      - hostvars[primary_host].primary_patch_list | difference(hostvars[standby_host].standby_patch_list) | length > 0
+      - hostvars[standby_host].standby_patch_list | difference(hostvars[primary_host].primary_patch_list) | length > 0
+
+# Precheck : primary site
+
 - name: Checking if Dataguard setup was already done
   ansible.builtin.stat:
     path: "{{ done_dir }}/drprecheck.success"
@@ -65,8 +132,8 @@
 
 - name: Copy Dataguard Pre-check script for primary
   ansible.builtin.template:
-    src: dataguard_precheck.sh.j2
-    dest: "{{ scripts_dir }}/dataguard_precheck.sh"
+    src: primary_precheck.sh.j2
+    dest: "{{ scripts_dir }}/primary_precheck.sh"
     mode: '0755'
   vars:
     database_name: "primary"
@@ -75,7 +142,7 @@
         - not drprecheckdone.stat.exists
 
 - name: Execute Dataguard Pre-check script on primary
-  ansible.builtin.shell: "{{ scripts_dir }}/dataguard_precheck.sh"
+  ansible.builtin.shell: "{{ scripts_dir }}/primary_precheck.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
@@ -83,39 +150,95 @@
         - inventory_hostname == primary_host 
         - not drprecheckdone.stat.exists
 
-- name: Debug Pre-check Output for primary dataabse
+- name: Debug Pre-check Output for primary database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 
         - inventory_hostname == primary_host 
         - not drprecheckdone.stat.exists
 
-## check only from DB home 
+- name: Extract DATABASE_SIZE from log
+  ansible.builtin.shell: "grep 'DATABASE_SIZE:' {{ done_dir }}/dataguard_precheck.log | awk -F ':' '{print $2}' | tr -d ' '"
+  register: db_size_result
+  when: inventory_hostname == primary_host
 
-- name: Get release patch details from site
-  shell: "{{ databases.primary.grid_db_home }}/bin/crsctl query has releasepatch" 
-  register: patch_info
+- name: Set DATABASE_SIZE fact on primary
+  ansible.builtin.set_fact:
+    standby_db_size: "{{ db_size_result.stdout | trim }}"
+  when: inventory_hostname == primary_host
 
-- name: Set patch level and patches facts
-  set_fact:
-    patch_level: "{{ patch_info.stdout | regex_search('Oracle Clusterware release patch level is \\[(.*?)\\]', '\\1') }}"
-    patches: "{{ patch_info.stdout | regex_search('complete list of patches \\[(.*?)\\]', '\\1') }}"
+- name: Fetch DATABASE_SIZE fact from primary to standby
+  ansible.builtin.set_fact:
+    standby_db_size: "{{ hostvars[primary_host].standby_db_size }}"
+  when: 
+      - inventory_hostname == standby_host
+      - hostvars[primary_host].standby_db_size is defined
+      
+# Precheck : Standby site
 
-- name: Set standby patch details for comparison (on standby only)
-  set_fact:
-    standby_patch_level: "{{ patch_level }}"
-    standby_patches: "{{ patches }}"
-  when: inventory_hostname == standby_host 
+- name: Checking if Dataguard setup was already done
+  ansible.builtin.stat:
+    path: "{{ done_dir }}/drprecheck.success"
+  register: drprecheckdone
+  when: inventory_hostname == standby_host
 
-- name: Set primary patch details for comparison (on primary only)
-  set_fact:
-    primary_patch_level: "{{ patch_level }}"
-    primary_patches: "{{ patches }}"
-  when: inventory_hostname == primary_host 
+- name: Copy Dataguard Pre-check script for primary
+  ansible.builtin.template:
+    src: standby_precheck.sh.j2
+    dest: "{{ scripts_dir }}/standby_precheck.sh"
+    mode: '0755'
+  vars:
+    database_name: "standby"
+    db_size: "{{ standby_db_size  }}"
+  when: 
+        - inventory_hostname == standby_host 
+        - not drprecheckdone.stat.exists
 
-- name: Fail if patch levels or patches do not match between primary and standby
-  fail:
-    msg: "Patch levels or patches mismatch between primary and standby databases!"
+- name: Execute Dataguard Pre-check script on standby
+  ansible.builtin.shell: "{{ scripts_dir }}/standby_precheck.sh"
+  register: precheck_output
+  failed_when: precheck_output.rc != 0
+  changed_when: false
+  when: 
+        - inventory_hostname == standby_host 
+        - not drprecheckdone.stat.exists
+
+- name: Debug Pre-check Output for primary database
+  ansible.builtin.debug:
+    msg: "{{ precheck_output.stdout_lines }}"
+  when: 
+        - inventory_hostname == standby_host 
+        - not drprecheckdone.stat.exists
+
+# Precheck: System Configuration Comparison
+
+- name: Gather system information (CPU, Memory) on all nodes
+  ansible.builtin.shell: |
+    echo "CPU_CORES=$(lsdev -Cc processor | wc -l)"
+    echo "CPU_SOCKETS=$(lparstat -i | grep 'Active Physical CPUs' | awk '{print $NF}')"
+    echo "TOTAL_MEMORY=$(lsattr -El mem0 | awk '/^goodsize/ {print $2}')"
+  register: system_info
+  changed_when: false
+
+- name: Set system facts for comparison
+  ansible.builtin.set_fact:
+    cpu_cores: "{{ system_info.stdout_lines[0].split('=')[1] }}"
+    cpu_sockets: "{{ system_info.stdout_lines[1].split('=')[1] }}"
+    total_memory: "{{ system_info.stdout_lines[2].split('=')[1] }}"
+
+- name: Fetch primary system configuration on standby
+  ansible.builtin.set_fact:
+    primary_cpu_cores: "{{ hostvars[primary_host].cpu_cores }}"
+    primary_cpu_sockets: "{{ hostvars[primary_host].cpu_sockets }}"
+    primary_total_memory: "{{ hostvars[primary_host].total_memory }}"
+  when: inventory_hostname == standby_host
+
+- name: Show warning if system configurations do not match
+  ansible.builtin.debug:
+    msg: >
+      WARNING: System configuration mismatch detected between primary and standby!
+      Primary: CPU Cores={{ hostvars[primary_host].cpu_cores }}, Sockets={{ hostvars[primary_host].cpu_sockets }}, Memory={{ hostvars[primary_host].total_memory }} GB
+      Standby: CPU Cores={{ cpu_cores }}, Sockets={{ cpu_sockets }}, Memory={{ total_memory }} GB
   when:
-    - hostvars[primary_host].primary_patch_level != hostvars[standby_host].standby_patch_level
-    - hostvars[primary_host].primary_patches != hostvars[standby_host].standby_patches
+    - inventory_hostname == standby_host
+    - cpu_cores != primary_cpu_cores or cpu_sockets != primary_cpu_sockets or total_memory != primary_total_memory

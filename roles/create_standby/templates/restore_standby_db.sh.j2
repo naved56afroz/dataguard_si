@@ -1,8 +1,9 @@
 #!/bin/bash
 
-export ORACLE_SID=$(ps -ef | grep pmon | grep ASM | awk '{match($NF, /\+ASM[0-9]*/); print substr($NF, RSTART, RLENGTH)}')
-export ORACLE_HOME=$(awk -F: -v sid="$ORACLE_SID" '$1 == sid {print $2}' /etc/oratab)
-export PATH=$PATH:$ORACLE_HOME/bin
+export ORACLE_SID={{ databases[database_name].db_sid }}
+export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
+export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
+RMAN_SCRIPT="{{ scripts_dir }}/rman_restore.rcv"
 MASTER_LOG="{{ done_dir }}/standby_rman_restore.log"
 FAILURE_LOG="{{ done_dir }}/standby_rman_restore_fail.log"
 
@@ -10,38 +11,9 @@ FAILURE_LOG="{{ done_dir }}/standby_rman_restore_fail.log"
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
 
-if [[ -z "$ORACLE_HOME" ]]; then
-  echo "ERROR: ORACLE_HOME is not set for ASM. Check /etc/oratab and update accordingly" | tee -a "$FAILURE_LOG"
-  exit 1
-fi
-
-# Fetch the disk group name from standby ASM
-su - {{ grid_user }} -c "sqlplus -s / as sysdba" <<SQL | tee "$MASTER_LOG"
-SET HEADING OFF
-SET FEEDBACK OFF
-SET PAGESIZE 0
-SET LINESIZE 1000
-SET TRIMOUT ON
-SET TRIMSPOOL ON
-
--- Fetch ASM disk group
-SELECT 'DISKGROUP:' || NAME FROM v\$asm_diskgroup WHERE STATE='MOUNTED';
-
-SQL
-
-DISKGROUP=$(grep "DISKGROUP:" "$MASTER_LOG" | awk -F ':' '{print $2}')
-
-# Check if disk group was retrieved
-if [[ -z "$DISKGROUP" || "$DISKGROUP" == "DISKGROUP:" ]]; then
-  echo "ERROR:Failed to fetch disk group from standby ASM, verify manually and retry" | tee -a "$FAILURE_LOG"
-  exit 1
-fi
-
-# Define values dynamically
-diskgroup="+${DISKGROUP}"
-export ORACLE_SID={{ databases[database_name].oracle_db_sid }}
-export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
-export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
+# Define values
+primary_diskgroup={{ databases.primary.file_dest }}
+standby_diskgroup={{ databases[database_name].file_dest }}
 
 # Check if the standby database is already running by checking PMON process
 if ps -ef | grep "pmon" | grep -q "$ORACLE_SID"; then
@@ -55,6 +27,7 @@ fi
 
 # Convert 'with_backup' variable to lowercase for consistency
 WITH_BACKUP="$(echo {{ with_backup | default('no') }} | tr '[:upper:]' '[:lower:]')"
+# RMAN restore Backup-based
 if [[ "$WITH_BACKUP" == "true" ]]; then
 
  {% set backup_format = backup_location ~ '/%U' %}
@@ -73,82 +46,101 @@ if [[ "$WITH_BACKUP" == "true" ]]; then
  
  echo "Using latest control file backup: $LATEST_CONTROLFILE"
  
- su - {{ db_oracle_user }} -c "rman target /" <<EOF | tee "$MASTER_LOG"
- RUN {
-     ALLOCATE CHANNEL ch1 DEVICE TYPE DISK;
-     ALLOCATE CHANNEL ch2 DEVICE TYPE DISK;
-     ALLOCATE CHANNEL ch3 DEVICE TYPE DISK;
-     ALLOCATE CHANNEL ch4 DEVICE TYPE DISK;
-     
-     set dbid {{ dbid }};
-     
-     # Identify the latest control file backup dynamically
-     restore standby controlfile from '$LATEST_CONTROLFILE';
-     sql "alter database mount standby database";
-     
-     # Catalog the backup pieces if needed
-     catalog start with '{{ backup_location }}/' noprompt;
-     
-     # Restore database
-     set newname for database to '${diskgroup}';
-     restore database;
-     switch datafile all;
-     recover database;
- 
-     RELEASE CHANNEL ch1;
-     RELEASE CHANNEL ch2;
-     RELEASE CHANNEL ch3;
-     RELEASE CHANNEL ch4;
- }
- EXIT;
-EOF
+ # Determine the number of CPU cores
+standby_cpu_core=$(lsdev -Cc processor | wc -l)
+primary_cpu_core={{ primary_cpu_core }}
+
+{
+    echo "RUN {"
+
+    # Allocate channels dynamically
+    i=1
+    while [ "$i" -le "$standby_cpu_core" ]; do
+        echo "    ALLOCATE CHANNEL ch$i DEVICE TYPE DISK ;"
+        i=`expr $i + 1`
+    done
+
+    echo "    set dbid {{ dbid }};"
+    echo ""
+    echo "    # Identify the latest control file backup dynamically"
+    echo "    restore standby controlfile from '$LATEST_CONTROLFILE';"
+    echo "    sql \"alter database mount standby database\";"
+    echo ""
+    echo "    # Catalog the backup pieces if needed"
+    echo "    catalog start with '{{ backup_location }}/' noprompt;"
+    echo ""
+    echo "    # Restore database"
+    echo "    set newname for database to '{{ databases[database_name].file_dest }}';"
+    echo "    restore database;"
+    echo "    switch datafile all;"
+    echo "    recover database;"
+    echo ""
+
+    # Release channels dynamically
+    i=1
+    while [ "$i" -le "$standby_cpu_core" ]; do
+        echo "    RELEASE CHANNEL ch$i;"
+        i=`expr $i + 1`
+    done
+
+    echo "}"
+    echo "EXIT;"
+} > "$RMAN_SCRIPT"
+
+su - {{ db_oracle_user }} -c rman target / cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
+
 # Capture RMAN exit status
 rman_exit_code=$?
 
+# Rman Duplicate from active database
 elif [[ "$WITH_BACKUP" == "false" ]]; then
 
  # Define values dynamically
- ORACLE_HOME={{ databases.standby.oracle_db_home }}
- ORACLE_SID={{ databases.standby.oracle_db_sid }}
- standby_diskgroup="+${DISKGROUP}"
- primary_diskgroup={{ primary_diskgroup }}
- PRIMARY_UNIQUE_NAME="{{ databases.primary.oracle_db_unique_name }}"
- PRIMARY_DB_NAME="{{ databases.primary.oracle_db_name }}"
- STANDBY_UNIQUE_NAME="{{ databases.standby.oracle_db_unique_name }}"
- log_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
- db_file_name_convert="'${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'"
- db_recovery_file_dest="{{ databases.standby.db_recovery_file_dest }}"
- db_recovery_file_dest_size="{{ databases.standby.db_recovery_file_dest_size }}"
+ primary_unique_name="{{ databases.primary.db_unique_name }}"
+ primary_db_name="{{ databases.primary.db_name }}"
+ standby_unique_name="{{ databases[database_name].db_unique_name }}"
+ log_file_name_convert="'${primary_diskgroup}/${primary_unique_name}','${standby_diskgroup}/${standby_unique_name}'"
+ db_file_name_convert="'${primary_diskgroup}/${primary_unique_name}','${standby_diskgroup}/${standby_unique_name}'"
+ db_create_file_dest="{{ databases[database_name].file_dest }}"
+ db_create_online_log_dest_1="{{ databases[database_name].online_log_dest1 }}"
+ db_recovery_file_dest="{{ databases[database_name].db_recovery_file_dest }}"
+ db_recovery_file_dest_size="{{ databases[database_name].db_recovery_file_dest_size }}"
  
- su - {{ db_oracle_user }} -c "rman target sys/{{ default_dbpass }}@{{ databases.primary.oracle_db_sid }} auxiliary sys/{{ default_dbpass }}@${STANDBY_UNIQUE_NAME}" <<EOF | tee "$MASTER_LOG"
- RUN {
-      ALLOCATE CHANNEL prmy1 TYPE DISK;
-      ALLOCATE CHANNEL prmy2 TYPE DISK;
-      ALLOCATE CHANNEL prmy3 TYPE DISK;
-      ALLOCATE CHANNEL prmy4 TYPE DISK;
-      ALLOCATE auxiliary CHANNEL stby TYPE DISK;
+ {
+    echo "RUN {"
+
+    # Allocate channels dynamically
+    i=1
+    while [ "$i" -le "$primary_cpu_core" ]; do
+        echo "    ALLOCATE CHANNEL prmy$i DEVICE TYPE DISK ;"
+        i=`expr $i + 1`
+    done
       
-      duplicate target database for standby from active database NOFILENAMECHECK
-      spfile
-        parameter_value_convert '${PRIMARY_UNIQUE_NAME}','${STANDBY_UNIQUE_NAME}'
-        set db_name='${PRIMARY_UNIQUE_NAME}'
-        set db_create_file_dest='${standby_diskgroup}'
-        set db_unique_name='${STANDBY_UNIQUE_NAME}'
-        set db_file_name_convert='${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'
-        set log_file_name_convert='${primary_diskgroup}/${PRIMARY_UNIQUE_NAME}','${standby_diskgroup}/${STANDBY_UNIQUE_NAME}'
-        set control_files='${standby_diskgroup}/${STANDBY_UNIQUE_NAME}/CONTROLFILE/${STANDBY_UNIQUE_NAME}_control01.ctl'
-        set log_archive_max_processes='5'
-        set fal_client='${STANDBY_UNIQUE_NAME}'
-        set fal_server='${PRIMARY_UNIQUE_NAME}'
-        set standby_file_management='MANUAL'
-        set log_archive_config='dg_config=(${PRIMARY_UNIQUE_NAME},${STANDBY_UNIQUE_NAME})'
-        set log_archive_dest_2='service=${PRIMARY_UNIQUE_NAME} ASYNC valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${PRIMARY_UNIQUE_NAME}'
-        set db_recovery_file_dest='${db_recovery_file_dest}'
-        set db_recovery_file_dest_size='${db_recovery_file_dest_size}'
- ;
- }
-EXIT;
-EOF
+      echo " duplicate target database for standby from active database NOFILENAMECHECK"
+      echo " spfile"
+      echo "   parameter_value_convert '${primary_unique_name}','${standby_unique_name}'"
+      echo "   set db_name='${primary_unique_name}'"
+      echo "   set db_create_file_dest='${db_create_file_dest}'"
+      echo "   set db_unique_name='${standby_unique_name}'"
+      echo "   set db_file_name_convert=${db_file_name_convert}"
+      echo "   set log_file_name_convert=${log_file_name_convert}"
+      echo "   set control_files='${db_create_file_dest}/${standby_unique_name}/CONTROLFILE/${standby_unique_name}_control01.ctl'"
+      echo "   set log_archive_max_processes='5'"
+      echo "   set fal_client='${standby_unique_name}'"
+      echo "   set fal_server='${primary_unique_name}'"
+      echo "   set standby_file_management='MANUAL'"
+      echo "   set log_archive_config='dg_config=(${primary_unique_name},${standby_unique_name})'"
+      echo "   set log_archive_dest_2='service=${primary_unique_name} ASYNC valid_for=(ONLINE_LOGFILE,PRIMARY_ROLE) db_unique_name=${primary_unique_name}'"
+      echo "   set db_create_online_log_dest_1='${db_create_online_log_dest_1}'"
+      echo "   set db_recovery_file_dest='${db_recovery_file_dest}'"
+      echo "   set db_recovery_file_dest_size='${db_recovery_file_dest_size}'"
+      echo " ;"
+      echo "}"
+      echo "EXIT;"
+} > "$RMAN_SCRIPT"
+
+su - {{ db_oracle_user }} -c rman target {{ sys_user }}/{{ default_dbpass }}@{{ databases.primary.db_sid }} auxiliary {{ sys_user }}/{{ default_dbpass }}@${standby_unique_name} cmdfile={{ scripts_dir }}/rman_restore.rcv | tee -a "$MASTER_LOG"
+
 # Capture RMAN exit status
 rman_exit_code=$?
 
@@ -158,13 +150,18 @@ else
 
 fi
 
-# Check if the RMAN command was successful and ensure there are no RMAN- errors in the log
-if [ $rman_exit_code -eq 0 ]; then
-    echo "Dataguard setup completed successfully." | tee -a $MASTER_LOG
+if [ $rman_exit_code -eq 0 ] && ! grep -q "ORA-" "$MASTER_LOG" && ! grep -q "ERROR" "$MASTER_LOG"; then
+    echo "RMAN completed successfully." | tee -a "$MASTER_LOG"
     touch "{{ done_dir }}/standby_restore.success"
+elif [[ $rman_exit_code -eq 1 ]] && ! grep -q "ORA-" "$MASTER_LOG" && ! grep -q "ERROR" "$MASTER_LOG"; then
+    echo "RMAN completed with warnings. Check logs for details." | tee -a "$MASTER_LOG"
+    touch "{{ done_dir }}/standby_restore.success"
+elif [[ $rman_exit_code -eq 2 ]]; then
+    echo "RMAN failed due to errors. Review the log: $MASTER_LOG" | tee -a "$FAILURE_LOG"
+    exit 2
 else
-    echo "Dataguard setup failed! Check logs for details: $MASTER_LOG" | tee -a "$FAILURE_LOG"
-    exit 1
+    echo "RMAN encountered a fatal error!" | tee -a "$FAILURE_LOG"
+    exit 3
 fi
 
 #Check for failures and exit accordingly
@@ -176,4 +173,5 @@ fi
 
 echo "Dataguard setup completed successfully!"
 rm -f "$FAILURE_LOG"
+#rm -f "{{ scripts_dir }}/restore_standby_db.sh"
 exit 0

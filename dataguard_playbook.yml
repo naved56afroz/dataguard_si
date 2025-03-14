@@ -22,14 +22,14 @@
     - role: dataguard_precheck
       tags: dataguard_precheck
 
-    - role: preconfig_primary
-      tags: preconfig_primary
+    - role: primary_config
+      tags: primary_config
 
-    - role: preconfig_standby
-      tags: preconfig_standby
+    - role: standby_config
+      tags: standby_config
 
-    - role: create_standby  
+    - role: create_standby
       tags: create_standby
 
-    - role: sync_gap
-      tags: sync_gap
+    - role: post_sync_check 
+      tags: post_sync_check

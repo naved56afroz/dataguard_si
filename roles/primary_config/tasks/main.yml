@@ -28,43 +28,16 @@
   when: dataguard_setup_done
   run_once: true
 
-- name: Copy DISKGROUP script from standby database
-  ansible.builtin.template:
-    src: ../../preconfig_standby/templates/diskgroup.sh
-    dest: "{{ scripts_dir }}/diskgroup.sh"
-    mode: '0755'
-  when: 
-      - inventory_hostname == standby_host 
-      
-- name: Fetch DISKGROUP from standby database
-  ansible.builtin.shell: "{{ scripts_dir }}/diskgroup.sh"
-  register: diskgroup_result
-  changed_when: false
-  when: 
-      - inventory_hostname == standby_host 
-     
-- name: Set DISKGROUP as fact on standby database
-  ansible.builtin.set_fact:
-    primary_diskgroup: "{{ diskgroup_result.stdout | trim }}"
-  when: 
-      - inventory_hostname == standby_host  
-
-- name: Fetch DISKGROUP fact from standby to primary
-  ansible.builtin.set_fact:
-    primary_diskgroup: "{{ hostvars[standby_host].primary_diskgroup }}"
-  when: 
-      - inventory_hostname == primary_host and hostvars[standby_host].primary_diskgroup is defined
-
 - name: Checking if Primary pre configure was already done
   ansible.builtin.stat:
-    path: "{{ done_dir }}/primary_preconfig.success"
+    path: "{{ done_dir }}/primary_config.success"
   register: primarypreconfigdone
   when: inventory_hostname == primary_host
 
 - name: Copy Dataguard Pre-config script for primary
   ansible.builtin.template:
-    src: primary_preconfig.sh.j2
-    dest: "{{ scripts_dir }}/primary_preconfig.sh"
+    src: primary_config.sh.j2
+    dest: "{{ scripts_dir }}/primary_config.sh"
     mode: '0755'
   vars:
     database_name: "primary"
@@ -74,7 +47,7 @@
       - not primarypreconfigdone.stat.exists
 
 - name: Execute Dataguard Pre-config script on primary
-  ansible.builtin.shell: "{{ scripts_dir }}/primary_preconfig.sh"
+  ansible.builtin.shell: "{{ scripts_dir }}/primary_config.sh"
   register: precheck_output
   failed_when: precheck_output.rc != 0
   changed_when: false
@@ -82,7 +55,7 @@
       - inventory_hostname == primary_host 
       - not primarypreconfigdone.stat.exists
 
-- name: Debug Pre-config Output for primary dataabse
+- name: Debug Pre-config Output for primary database
   ansible.builtin.debug:
     msg: "{{ precheck_output.stdout_lines }}"
   when: 

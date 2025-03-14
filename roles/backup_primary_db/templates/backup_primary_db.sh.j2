@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export ORACLE_SID={{ databases[database_name].oracle_db_sid }}
+export ORACLE_SID={{ databases[database_name].db_sid }}
 export ORACLE_HOME={{ databases[database_name].oracle_db_home }}
 export PATH={{ databases[database_name].oracle_db_home }}/bin:$PATH
 
@@ -11,6 +11,9 @@ FAILURE_LOG="{{ done_dir }}/primary_rman_backup.log"
 > "$MASTER_LOG"
 > "$FAILURE_LOG"
 
+# Determine the number of CPU cores on AIX
+total_cores=$(lsdev -Cc processor | wc -l)
+
 # Run rman backup
 
 {% set backup_format = backup_location ~ '/%U' %}
@@ -20,10 +23,9 @@ FAILURE_LOG="{{ done_dir }}/primary_rman_backup.log"
 
 su - {{ db_oracle_user }} -c "rman target /" <<EOF | tee "$MASTER_LOG"
 RUN {
-    ALLOCATE CHANNEL ch1 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
-    ALLOCATE CHANNEL ch2 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
-    ALLOCATE CHANNEL ch3 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
-    ALLOCATE CHANNEL ch4 DEVICE TYPE DISK FORMAT '{{ backup_format }}';
+    $(for (( i=1; i<=total_cores; i++ )); do
+        echo "    ALLOCATE CHANNEL ch$i DEVICE TYPE DISK FORMAT '{{ backup_format }}';"
+    done)
     
     # Backup full database with a distinct tag
     BACKUP DATABASE FORMAT '{{ backup_format }}' TAG '{{ fullbackup_tag }}' PLUS ARCHIVELOG;
@@ -31,10 +33,9 @@ RUN {
     # Backup control file separately with a distinct tag
     BACKUP CURRENT CONTROLFILE FOR STANDBY FORMAT '{{ ctrl_backup_format }}' TAG '{{ controlfile_tag }}';
     
-    RELEASE CHANNEL ch1;
-    RELEASE CHANNEL ch2;
-    RELEASE CHANNEL ch3;
-    RELEASE CHANNEL ch4;
+    $(for (( i=1; i<=total_cores; i++ )); do
+        echo "    RELEASE CHANNEL ch$i;"
+    done)
 }
 EXIT;
 EOF
