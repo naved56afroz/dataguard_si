@@ -135,6 +135,15 @@ else
   EXIT;
 SQL
 EOF
+
+  # Capture SQL exit status for redo log addition
+  sql_exit_code=$?
+
+  # Check if the SQL command was successful
+  if [[ $sql_exit_code -ne 0 ]]; then
+      echo "ERROR: SQL command for adding standby redo logs failed with exit status $sql_exit_code. Check logs for details." | tee -a "$FAILURE_LOG"
+      exit 1
+  fi
 fi
 
 # 7. Handle PFILE/SPFILE
@@ -157,6 +166,15 @@ su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
   EXIT;
 SQL
 EOF
+
+# Capture SQL exit status for PFILE creation
+sql_exit_code=$?
+
+# Check if the SQL command was successful
+if [[ $sql_exit_code -ne 0 ]]; then
+    echo "ERROR: SQL command for creating PFILE failed with exit status $sql_exit_code. Check logs for details." | tee -a "$FAILURE_LOG"
+    exit 1
+fi
 
 # 9. Update tnsnames.ora
 # Define the new entry
@@ -244,7 +262,7 @@ su - {{ db_oracle_user }} <<EOF | tee -a $MASTER_LOG
 SQL
 EOF
 
-# Capture SQL exit status
+# Capture SQL exit status for initialization parameter modification
 sql_exit_code=$?
 
 # Check if the SQL command was successful
