@@ -1,6 +1,6 @@
 ---
 # Copyright (c) IBM Corporation 2021
-# tasks file for sync_gap
+# tasks file for post_sync_check
 - name: Run initialization tasks
   ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml
   when: not init_done is defined

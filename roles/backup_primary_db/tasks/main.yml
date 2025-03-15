@@ -1,6 +1,6 @@
 ---
 # Copyright (c) IBM Corporation 2021
-# tasks file for oracle_install
+# tasks file for backup_primary_db
 
 - name: Run initialization tasks
   ansible.builtin.include_tasks: ../../dataguard_precheck/tasks/init.yml

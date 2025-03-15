@@ -8,7 +8,7 @@
 ###############################################################################
 
 ## Section A - Common Variables
-# rac:                       Specify true if rac setup or false in case of single instance
+# rac:                       Specify true if rac setup or false in case of single instance.
 # primary_host:              Provide hostname for primary server
 # standby_host:              Provide hostname for standby server
 # db_oracle_user:            Provide the RDBMS software owner, ex: oracle.
